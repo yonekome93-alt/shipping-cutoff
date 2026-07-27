@@ -22,7 +22,7 @@
     .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:16px}table{width:100%;border-collapse:collapse;min-width:690px}th,td{padding:12px;text-align:left;border-bottom:1px solid var(--line)}th{font-size:12px;color:var(--muted);background:#f8faff}td input{width:100%;min-width:90px;border:1px solid var(--line);border-radius:10px;padding:10px}.row-late{background:#fff0f2}.row-done{background:#effaf5}.footer-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}.message{min-height:22px;margin-top:9px;color:var(--green);font-weight:700;font-size:13px}
     .breaks{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.breaks span{background:#f0f3f8;border-radius:999px;padding:7px 11px;color:#56627a;font-size:12px}
     .sync{border:0;border-radius:999px;padding:8px 11px;font-size:11px;font-weight:800;background:#eef1f6;color:#657089}.sync.ok{background:#e7f7f0;color:var(--green)}.sync.error{background:#fff0f2;color:var(--red)}
-    .alerts{display:grid;gap:8px}.alert-row{display:flex;gap:12px;align-items:center;padding:14px;border-radius:14px;border:1px solid var(--line)}.alert-row.danger{background:#fff0f2;border-color:#f2cbd2}.alert-row.warn{background:#fff8e8;border-color:#edd9aa}.alert-row.ok{background:#edf9f4;border-color:#bde4d5}.alert-row b{display:block}.alert-row small{color:var(--muted)}
+    .alerts{display:grid;gap:8px}.alert-row{display:flex;gap:12px;align-items:center;padding:14px;border-radius:14px;border:1px solid var(--line)}.alert-row.danger{background:#fff0f2;border-color:#f2cbd2}.alert-row.urgent{background:#fff4e6;border-color:#efc68d}.alert-row.warn{background:#fff8e8;border-color:#edd9aa}.alert-row.ok{background:#edf9f4;border-color:#bde4d5}.alert-row b{display:block}.alert-row p{margin:5px 0;line-height:1.55}.alert-row small{display:block;color:var(--muted)}
     .quick-grid{display:grid;grid-template-columns:1.2fr .7fr 1fr auto;gap:10px;align-items:end}.quick-grid label{font-size:12px;color:var(--muted);font-weight:700}.quick-grid input,.quick-grid select{display:block;width:100%;margin-top:5px;border:1px solid var(--line);border-radius:11px;padding:10px;background:#fff}
     .history-list{display:grid;gap:8px;margin-top:12px}.history-item{display:flex;justify-content:space-between;gap:12px;padding:12px;background:#f7f9fd;border-radius:12px;font-size:13px}.history-item small{color:var(--muted)}
     .report-box{width:100%;min-height:260px;border:1px solid var(--line);border-radius:14px;padding:14px;line-height:1.7;background:#f9fbfe;color:var(--ink)}
@@ -53,7 +53,7 @@
       </div>
     </section>
     <section class="panel">
-      <div class="section-head"><div><h2>締切前アラート</h2><p>残り30分と、現在ペースでは間に合わない便を自動検知します。</p></div><div class="controls"><button id="voiceButton" class="secondary" onclick="toggleVoiceGuide()">音声案内を有効化</button><button class="secondary" onclick="enableNotifications()">通知を有効化</button></div></div>
+      <div class="section-head"><div><h2>締切前アラート</h2><p>残り60分・30分と、現在ペースでは間に合わない便を先回りして知らせます。</p></div><div class="controls"><button id="voiceButton" class="secondary" onclick="toggleVoiceGuide()">音声案内を有効化</button><button class="secondary" onclick="enableNotifications()">通知を有効化</button></div></div>
       <div id="alertList" class="alerts"></div>
     </section>
     <section class="panel">
@@ -161,7 +161,7 @@
     let sharedPinValue='',cloudBusy=false,cloudUpdatedAt='',lastCloudRevision='',saveConflict=false;
     let isTestMode=localStorage.getItem(TEST_MODE_KEY)==='1';
     let voiceEnabled=localStorage.getItem(VOICE_KEY)==='1';
-    let spokenAlerts=new Set();
+    let spokenAlerts=new Set(),notifiedAlerts=new Set();
     const deviceId=localStorage.getItem(DEVICE_ID_KEY)||((crypto.randomUUID?.()||String(Date.now())));localStorage.setItem(DEVICE_ID_KEY,deviceId);
     const defaults=[
       {id:'kyushu-am',area:'九州①',cutoff:'10:00'},{id:'okinawa',area:'沖縄',cutoff:'11:00'},
@@ -217,8 +217,38 @@
     function requiredWorkersFor(row,now=nowMinutes()){
       if(row.remaining<=0)return 0;const work=workingMinutes(Math.max(now,row.start),row.deadline);if(work<=0)return 99;return Math.max(1,Math.ceil((row.groupRemaining/(work/60))/state.onePersonRate))
     }
+    function finishAtRate(start,quantity,rate){
+      if(!rate||rate<=0)return null;
+      let cursor=start,needed=Math.ceil(quantity/rate*60),guard=0;
+      while(needed>0&&guard<2880){
+        const resting=state.breaks.some(([a,b])=>cursor>=a&&cursor<b);
+        if(!resting)needed--;
+        cursor++;guard++;
+      }
+      return cursor;
+    }
     function alertRows(rows,now=nowMinutes()){
-      return rows.filter(x=>x.item.planned>0&&x.remaining>0).map(x=>{const rate=actualRateFor(x.item.id),forecast=rate?now+Math.ceil(x.remaining/rate*60):null,mins=x.deadline-now,danger=mins<=0||(forecast!==null&&forecast>x.deadline),soon=mins>0&&mins<=30;return{...x,rate,forecast,mins,danger,soon}}).filter(x=>x.danger||x.soon)
+      return rows.filter(x=>x.item.planned>0&&x.remaining>0).map(x=>{const rate=actualRateFor(x.item.id),forecast=rate?finishAtRate(now,x.remaining,rate):null,mins=x.deadline-now,danger=mins<=0||(forecast!==null&&forecast>x.deadline),tier=mins<=30?'30':mins<=60?'60':'early';return{...x,rate,forecast,mins,danger,tier}}).filter(x=>x.danger||(x.mins>0&&x.mins<=60))
+    }
+    function alertAdvice(x,now=nowMinutes()){
+      const needed=requiredWorkersFor(x,now),extra=needed<99?Math.max(0,needed-state.workers):0;
+      const forecastText=x.forecast===null?'実績待ち':x.forecast>=1440?`翌日 ${clock(x.forecast%1440)}`:clock(x.forecast);
+      if(x.danger){
+        let action;
+        if(x.mins<=0)action='締切を超過しています。すぐに応援配置と処理順を見直してください。';
+        else if(extra>0&&x.rate){
+          const improved=finishAtRate(now,x.remaining,x.rate+extra*state.onePersonRate),improvedText=improved>=1440?`翌日 ${clock(improved%1440)}`:clock(improved);
+          action=`現在の終了予測は${forecastText}です。あと${extra}名追加すると、${improvedText}終了見込みです。`;
+        }else action=`現在の終了予測は${forecastText}です。必要速度まで処理ペースを上げてください。`;
+        return{title:`${x.item.area}便は${x.item.cutoff}に間に合わない見込みです`,action,detail:`残${x.remaining.toLocaleString()}個／実績速度 ${x.rate?x.rate.toLocaleString()+'個/時':'未計測'}／必要人数 ${needed>=99?'算出不可':needed+'名'}`};
+      }
+      const requiredRate=x.work>0?Math.ceil(x.groupRemaining/(Math.max(1,workingMinutes(Math.max(now,x.start),x.deadline))/60)):0;
+      const action=extra>0
+        ?`残り${x.remaining.toLocaleString()}個です。締切に間に合わせるには、あと${extra}名の応援を検討してください。`
+        :x.tier==='30'
+          ?`残り${x.remaining.toLocaleString()}個です。必要速度${requiredRate.toLocaleString()}個/時を維持してください。`
+          :`現在の配置で対応可能です。進捗と必要速度を確認してください。`;
+      return{title:`${x.item.area}便は締切まであと${Math.max(0,x.mins)}分です`,action,detail:`残${x.remaining.toLocaleString()}個／実績速度 ${x.rate?x.rate.toLocaleString()+'個/時':'未計測'}／終了予測 ${forecastText}／必要人数 ${needed>=99?'算出不可':needed+'名'}`};
     }
     function render(){
       const now=nowMinutes(),rows=groupedRows(),pending=rows.filter(x=>x.item.planned>0&&x.remaining>0),done=rows.filter(x=>x.item.planned>0&&x.remaining===0).length;
@@ -243,7 +273,7 @@
       workerResult.innerHTML=`<strong>${state.effectiveTime}から${state.workers}名：1人あたり ${person.toLocaleString()}個/時・${per15.toLocaleString()}個/15分</strong><p>残り${total.toLocaleString()}個／最終締切${clock(final)}／実働${work}分（休憩除外）／チーム必要速度${team.toLocaleString()}個/時</p><p><b>自動提案：${suggested}名</b>（1人${state.onePersonRate.toLocaleString()}個/時基準）${gap>0?`・あと${gap}名必要`:gap<0?`・${Math.abs(gap)}名の余裕`:'・現在人数で対応可能'}</p>`;
     }
     function renderAlerts(rows,now){
-      const alerts=alertRows(rows,now);alertList.innerHTML=alerts.length?alerts.map(x=>`<div class="alert-row ${x.danger?'danger':'warn'}"><div><b>${escapeHtml(x.item.area)} ${x.item.cutoff}締切：${x.danger?'間に合わない可能性':'残り30分以内'}</b><small>残${x.remaining.toLocaleString()}個／実績速度 ${x.rate?x.rate.toLocaleString()+'個/時':'未計測'}／終了予測 ${forecastFor(x,now)}／必要人数 ${requiredWorkersFor(x,now)>=99?'算出不可':requiredWorkersFor(x,now)+'名'}</small></div></div>`).join(''):'<div class="alert-row ok"><div><b>現在、緊急アラートはありません</b><small>進捗を入力すると実績速度から先回り判定します。</small></div></div>';
+      const alerts=alertRows(rows,now);alertList.innerHTML=alerts.length?alerts.map(x=>{const advice=alertAdvice(x,now);return`<div class="alert-row ${x.danger?'danger':x.tier==='30'?'urgent':'warn'}"><div><b>${escapeHtml(advice.title)}</b><p>${escapeHtml(advice.action)}</p><small>${escapeHtml(advice.detail)}</small></div></div>`}).join(''):'<div class="alert-row ok"><div><b>現在、緊急アラートはありません</b><small>進捗を入力すると実績速度から先回り判定します。</small></div></div>';
     }
     function renderWorkerHistory(){
       workerHistory.innerHTML=state.workerChanges.length?`<b>人数・基準能力の変更履歴</b>${[...state.workerChanges].reverse().slice(0,12).map(x=>`<div class="history-item"><span>${x.time}から <b>${x.workers}名</b>${x.rateChanged||x.kind==='start'?`・1人${x.onePersonRate}個/時`:''}</span><small>${new Date(x.savedAt).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</small></div>`).join('')}`:'<div class="history-item"><span>人数変更履歴はまだありません</span></div>';
@@ -383,7 +413,12 @@
     function toggleVoiceGuide(){voiceEnabled=!voiceEnabled;localStorage.setItem(VOICE_KEY,voiceEnabled?'1':'0');if(voiceEnabled)speak('音声案内を有効にしました。');else if('speechSynthesis'in window)window.speechSynthesis.cancel();render()}
     function announceAlerts(){
       if(!voiceEnabled)return;const alerts=alertRows(groupedRows()),today=dateKey();
-      for(const x of alerts){const bucket=x.mins<=5?'5':x.mins<=15?'15':'30',key=`${today}-${x.item.id}-${bucket}-${x.danger?'risk':'soon'}`;if(spokenAlerts.has(key))continue;spokenAlerts.add(key);const needed=requiredWorkersFor(x);speak(`${x.item.area}便の締切まで${Math.max(0,x.mins)}分です。残り${x.remaining}個です。${x.danger?'現在の速度では間に合わない可能性があります。':''}${needed>state.workers&&needed<99?`あと${needed-state.workers}名必要です。`:''}`);break}
+      for(const x of alerts){const key=`${today}-${x.item.id}-${x.tier}-${x.danger?'risk':'time'}`;if(spokenAlerts.has(key))continue;spokenAlerts.add(key);const advice=alertAdvice(x);speak(`${advice.title}。${advice.action}`);break}
+    }
+    function notifyAlerts(){
+      if(!('Notification'in window)||Notification.permission!=='granted')return;
+      const alerts=alertRows(groupedRows()),today=dateKey();
+      for(const x of alerts){const key=`${today}-${x.item.id}-${x.tier}-${x.danger?'risk':'time'}`;if(notifiedAlerts.has(key))continue;notifiedAlerts.add(key);const advice=alertAdvice(x);new Notification(advice.title,{body:advice.action});break}
     }
     function toggleTestMode(){
       if(!isTestMode){
@@ -401,7 +436,7 @@
     function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
     quickWave.addEventListener('change',()=>{const item=state.waves.find(x=>x.id===quickWave.value);quickCompleted.value=item?.completed||0;renderQuickResult(quickWave.value)});
     setNow();render();bootstrapCloud();
-    setInterval(()=>{const rows=groupedRows(),alerts=alertRows(rows);if(alerts.some(x=>x.danger)&&'Notification'in window&&Notification.permission==='granted')new Notification('出荷締切アラート',{body:`${alerts[0].item.area}が締切リスクです。残${alerts[0].remaining.toLocaleString()}個`});announceAlerts();renderAlerts(rows,nowMinutes())},60000);
+    setInterval(()=>{const rows=groupedRows();notifyAlerts();announceAlerts();renderAlerts(rows,nowMinutes())},60000);
     sharedPin.addEventListener('keydown',event=>{if(event.key==='Enter')unlockSharedPin()});
     setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState()},15000);
     if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
