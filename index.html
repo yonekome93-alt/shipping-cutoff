@@ -30,7 +30,7 @@
     .ops-status{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.last-sync{font-size:11px;color:var(--muted)}.conflict{padding:14px;border-radius:14px;background:#fff0f2;border:1px solid #f2cbd2;color:#9c3043;margin-bottom:12px}.conflict[hidden]{display:none}
     .audit-actions{display:flex;gap:8px;flex-wrap:wrap}.history-kind{display:inline-block;margin-left:7px;padding:3px 7px;border-radius:999px;background:#edf2ff;color:var(--blue);font-size:10px;font-weight:800}
     .future-panel{border-color:#cbd8ff;background:linear-gradient(180deg,#f7f9ff 0,#fff 42%)}.future-date{font-weight:800;color:var(--blue)}
-    .setup-grid{display:grid;grid-template-columns:1fr 1.45fr;gap:12px;margin-top:16px}.setup-card{border:1px solid var(--line);border-radius:16px;padding:16px;background:#f8faff}.setup-card h3{margin:0 0 5px;font-size:17px}.setup-card>p{margin:0 0 13px;color:var(--muted);font-size:13px;line-height:1.55}.step{display:inline-grid;place-items:center;width:25px;height:25px;margin-right:7px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px}.setup-card .controls{align-items:end}.setup-card .primary{margin-top:8px}
+    .setup-grid{display:grid;grid-template-columns:1fr 1.15fr;gap:12px;margin-top:16px}.setup-card{border:1px solid var(--line);border-radius:16px;padding:16px;background:#f8faff}.setup-card h3{margin:0 0 5px;font-size:17px}.setup-card>p,.setup-card .details-body>p{margin:0 0 13px;color:var(--muted);font-size:13px;line-height:1.55}.step{display:inline-grid;place-items:center;width:25px;height:25px;margin-right:7px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px}.setup-card .controls{align-items:end}.setup-card .primary{margin-top:8px}.setup-card summary{cursor:pointer;list-style:none;font-weight:800;font-size:17px}.setup-card summary::-webkit-details-marker{display:none}.setup-card summary::after{content:"開く ＋";float:right;color:var(--blue);font-size:12px}.setup-card[open] summary::after{content:"閉じる −"}.details-body{padding-top:12px}
     .auth{position:fixed;inset:0;background:#f3f6fb;z-index:50;display:none;place-items:center;padding:20px}.auth.open{display:grid}.auth-card{width:min(430px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;padding:28px;box-shadow:0 18px 60px rgba(20,33,61,.15)}.auth-card h2{font-size:28px;margin:8px 0}.auth-card p{color:var(--muted);line-height:1.6}.auth-card input{display:block;width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:16px}.auth-card button{width:100%;margin-top:10px}.auth-message{font-size:12px;color:var(--green)}
     @media(max-width:760px){.shell{padding:14px 12px 55px}.hero,.panel{padding:18px;border-radius:18px}.summary{grid-template-columns:repeat(2,1fr)}.metric strong{font-size:23px}.section-head{align-items:flex-start;flex-direction:column}.pace-grid,.setup-grid{grid-template-columns:1fr}.pace-metrics strong{font-size:16px}.controls{width:100%}.controls label{flex:1}.controls input,.controls select{width:100%}.controls button{flex:1}.brand small{display:none}}
   </style>
@@ -62,21 +62,27 @@
       </div>
       <div class="setup-grid">
         <div class="setup-card">
-          <h3><span class="step">1</span>今日の開始時刻を設定</h3>
-          <p>作業を始める時刻です。通常は最初に1回だけ設定します。</p>
-          <div class="controls"><label>開始時刻<input id="operationStart" type="time" value="09:30"></label><button class="primary" onclick="saveOperationStart()">開始時刻を保存</button></div>
-        </div>
-        <div class="setup-card">
-          <h3><span class="step">2</span>途中で人数が変わったとき</h3>
-          <p>例：11:20から2名になった場合に入力します。人数が変わらなければ操作不要です。</p>
+          <h3><span class="step">1</span>今日の開始設定</h3>
+          <p>作業開始前に、次の3項目を1回設定します。</p>
           <div class="controls">
-            <label>変更後の人数<select id="workerCount"><option value="1">1名</option><option value="2">2名</option></select></label>
-            <label>変更した時刻<input id="workerTime" type="time"></label>
+            <label>開始時刻<input id="operationStart" type="time" value="09:30"></label>
+            <label>開始時の人数<select id="initialWorkerCount"><option value="1">1名</option><option value="2">2名</option></select></label>
             <label>1人の基準能力<input id="onePersonRate" type="number" min="1" value="100"></label>
-            <button class="secondary" onclick="setNow()">現在時刻を入れる</button>
-            <button class="primary" onclick="applyWorkers()">人数変更を反映</button>
+            <button class="primary" onclick="saveStartSettings()">開始設定を保存</button>
           </div>
         </div>
+        <details class="setup-card">
+          <summary><span class="step">2</span>途中で人数が変わったとき</summary>
+          <div class="details-body">
+            <p>例：11:20から2名になった場合に入力します。人数が変わらなければ開く必要はありません。</p>
+            <div class="controls">
+              <label>変更後の人数<select id="workerChangeCount"><option value="1">1名</option><option value="2">2名</option></select></label>
+              <label>変更した時刻<input id="workerTime" type="time"></label>
+              <button class="secondary" onclick="setNow()">現在時刻を入れる</button>
+              <button class="primary" onclick="applyWorkers()">人数変更を反映</button>
+            </div>
+          </div>
+        </details>
       </div>
       <div id="workerResult" class="worker-result"></div>
       <div class="breaks"><span>10:30〜10:45 休憩</span><span>12:00〜13:00 休憩</span><span>15:30〜15:45 休憩</span></div>
@@ -156,8 +162,9 @@
       const futurePlans=saved.futurePlans&&typeof saved.futurePlans==='object'?saved.futurePlans:{};
       const todayFuture=futurePlans[dateKey()],todayFutureWaves=Array.isArray(todayFuture)?todayFuture:(Array.isArray(todayFuture?.waves)?todayFuture.waves:null);
       const sourceWaves=newDay&&todayFutureWaves?todayFutureWaves:old;
+      const nextOperationStart=newDay&&todayFuture?.operationStart?todayFuture.operationStart:(saved.operationStart||'09:30'),startWorkers=Number(saved.startWorkers)||Number(saved.workers)||1;
       if(newDay&&saved.date&&old.some(x=>Number(x.planned)>0)&&!planHistory.some(x=>x.date===saved.date))planHistory.unshift({date:saved.date,waves:old.map(x=>({id:x.id,area:x.area,cutoff:x.cutoff,planned:Number(x.planned)||0})),savedAt:new Date().toISOString()});
-      return {date:dateKey(),operationStart:newDay&&todayFuture?.operationStart?todayFuture.operationStart:(saved.operationStart||'09:30'),workers:Number(saved.workers)||1,effectiveTime:saved.effectiveTime||'09:30',onePersonRate:Math.max(1,Number(saved.onePersonRate)||100),workerChanges:Array.isArray(saved.workerChanges)?saved.workerChanges:[],progressSnapshots:newDay?[]:(Array.isArray(saved.progressSnapshots)?saved.progressSnapshots:[]),planHistory:planHistory.slice(0,60),futurePlans,reports:Array.isArray(saved.reports)?saved.reports:[],auditLog:Array.isArray(saved.auditLog)?saved.auditLog:[],undoStack:Array.isArray(saved.undoStack)?saved.undoStack:[],syncRevision:saved.syncRevision||'',syncDevice:saved.syncDevice||'',waves:defaults.map(x=>{const prev=sourceWaves.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
+      return {date:dateKey(),operationStart:nextOperationStart,startWorkers,workers:newDay?startWorkers:(Number(saved.workers)||1),effectiveTime:newDay?nextOperationStart:(saved.effectiveTime||nextOperationStart),onePersonRate:Math.max(1,Number(saved.onePersonRate)||100),workerChanges:Array.isArray(saved.workerChanges)?saved.workerChanges:[],progressSnapshots:newDay?[]:(Array.isArray(saved.progressSnapshots)?saved.progressSnapshots:[]),planHistory:planHistory.slice(0,60),futurePlans,reports:Array.isArray(saved.reports)?saved.reports:[],auditLog:Array.isArray(saved.auditLog)?saved.auditLog:[],undoStack:Array.isArray(saved.undoStack)?saved.undoStack:[],syncRevision:saved.syncRevision||'',syncDevice:saved.syncDevice||'',waves:defaults.map(x=>{const prev=sourceWaves.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
     }
     let state=load();
     let lastStableState=JSON.parse(JSON.stringify(state));
@@ -196,7 +203,7 @@
       tomorrowPlanDate.min=offsetDateKey(1);if(!tomorrowPlanDate.value||tomorrowPlanDate.value<=dateKey())tomorrowPlanDate.value=offsetDateKey(1);
       operationStart.value=state.operationStart||'09:30';operationSummaryText.textContent=`${state.operationStart||'09:30'}から最終締切まで。休憩時間を自動で除外します。`;
       doneSummary.textContent=`${done}／${state.waves.length}便`;soonSummary.textContent=`${pending.filter(x=>x.deadline>now&&x.deadline-now<=60).length}便`;lateSummary.textContent=`${pending.filter(x=>now>=x.deadline).length}便`;remainSummary.textContent=`${pending.reduce((s,x)=>s+x.remaining,0).toLocaleString()}個`;
-      workerCount.value=String(state.workers);workerTime.value=state.effectiveTime;onePersonRate.value=state.onePersonRate;
+      initialWorkerCount.value=String(state.startWorkers||1);workerChangeCount.value=String(state.workers);workerTime.value=state.effectiveTime;onePersonRate.value=state.onePersonRate;
       quickWave.innerHTML=state.waves.map(x=>`<option value="${x.id}">${escapeHtml(x.area)}（${x.cutoff}）</option>`).join('');
       const selected=state.waves.find(x=>x.id===quickWave.value)||state.waves[0];quickWave.value=selected.id;quickCompleted.value=selected.completed;
       renderNext(pending[0],now);renderWorker(pending,now);renderCards(rows,now);renderTable(rows,now);renderTomorrowPlan();renderAlerts(rows,now);renderWorkerHistory();renderQuickResult(selected.id);renderReports();renderAuditHistory();
@@ -280,8 +287,8 @@
     }
     async function completeWave(id){collect();const item=state.waves.find(x=>x.id===id);if(!item||!item.planned)return;item.completed=item.planned;item.completedAt=new Date().toISOString();state.progressSnapshots.push({id:crypto.randomUUID?.()||String(Date.now()),waveId:id,completed:item.completed,interval:0,at:item.completedAt});await saveState('shipping_complete');const next=groupedRows().find(x=>x.item.planned>0&&x.remaining>0);speak(`${item.area}便が完了しました。${next?`次は${next.item.area}便です。${next.item.cutoff}までに残り${next.remaining}個処理してください。`:'本日の便はすべて完了しました。'}`);saveMessage.textContent=`${item.area}を完了し、次便を再計算しました。`}
     async function saveQuickProgress(){const id=quickWave.value,item=state.waves.find(x=>x.id===id),completed=Math.max(0,Math.round(Number(quickCompleted.value)||0));if(!item)return;item.completed=Math.min(Math.max(completed,0),Math.max(item.planned,completed));const at=new Date().toISOString();state.progressSnapshots.push({id:crypto.randomUUID?.()||String(Date.now()),waveId:id,completed:item.completed,interval:Number(quickInterval.value)||5,at});if(item.planned>0&&item.completed>=item.planned&&!item.completedAt)item.completedAt=at;if(item.completed<item.planned)item.completedAt=null;state.progressSnapshots=state.progressSnapshots.slice(-500);await saveState('shipping_interval_progress');quickResult.scrollIntoView({behavior:'smooth',block:'center'})}
-    async function saveOperationStart(){const previous=state.operationStart||'09:30',next=operationStart.value||'09:30';state.operationStart=next;if(!state.effectiveTime||state.effectiveTime===previous)state.effectiveTime=next;await saveState('shipping_start_change');workerMessage.textContent=`今日の開始時刻を${next}に変更し、必要ペースを再計算しました。`}
-    async function applyWorkers(){state.workers=Math.min(2,Math.max(1,Number(workerCount.value)||1));state.effectiveTime=workerTime.value||state.operationStart||'09:30';state.onePersonRate=Math.max(1,Number(onePersonRate.value)||100);state.workerChanges.push({time:state.effectiveTime,workers:state.workers,onePersonRate:state.onePersonRate,operationStart:state.operationStart,savedAt:new Date().toISOString()});state.workerChanges=state.workerChanges.slice(-100);await saveState('shipping_worker_change');workerMessage.textContent=`${state.effectiveTime}から${state.workers}名として再計算・保存しました。`}
+    async function saveStartSettings(){const next=operationStart.value||'09:30',workers=Math.min(2,Math.max(1,Number(initialWorkerCount.value)||1));state.operationStart=next;state.startWorkers=workers;state.workers=workers;state.effectiveTime=next;state.onePersonRate=Math.max(1,Number(onePersonRate.value)||100);state.workerChanges.push({time:next,workers,onePersonRate:state.onePersonRate,operationStart:next,kind:'start',savedAt:new Date().toISOString()});state.workerChanges=state.workerChanges.slice(-100);await saveState('shipping_start_change');workerMessage.textContent=`開始設定を保存しました：${next}開始・${workers}名・1人${state.onePersonRate}個/時。`}
+    async function applyWorkers(){state.workers=Math.min(2,Math.max(1,Number(workerChangeCount.value)||1));state.effectiveTime=workerTime.value||state.operationStart||'09:30';state.workerChanges.push({time:state.effectiveTime,workers:state.workers,onePersonRate:state.onePersonRate,operationStart:state.operationStart,kind:'change',savedAt:new Date().toISOString()});state.workerChanges=state.workerChanges.slice(-100);await saveState('shipping_worker_change');workerMessage.textContent=`${state.effectiveTime}から${state.workers}名として再計算・保存しました。`}
     function setNow(){workerTime.value=clock(nowMinutes());workerMessage.textContent='現在時刻を入力しました。「変更後の人数」を選び、「人数変更を反映」を押してください。'}
     async function resetToday(){if(!confirm('本日の出荷済み数と完了時刻をリセットしますか？'))return;state.waves.forEach(x=>{x.completed=0;x.completedAt=null});state.progressSnapshots=[];await saveState('shipping_reset');saveMessage.textContent='本日の実績をリセットしました。'}
     async function copyPreviousPlan(){const previous=state.planHistory[0];if(!previous){saveMessage.textContent='複製できる過去計画がありません。';return}state.waves=state.waves.map(x=>{const p=previous.waves.find(y=>y.id===x.id)||{};return{...x,area:p.area||x.area,cutoff:p.cutoff||x.cutoff,planned:Number(p.planned)||0,completed:0,completedAt:null}});state.progressSnapshots=[];await saveState('shipping_copy_previous');saveMessage.textContent=`${previous.date}の計画を本日へ複製しました。`}
