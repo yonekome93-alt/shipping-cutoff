@@ -24,7 +24,7 @@
     .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:16px}table{width:100%;border-collapse:collapse;min-width:690px}th,td{padding:12px;text-align:left;border-bottom:1px solid var(--line)}th{font-size:12px;color:var(--muted);background:#f8faff}td input{width:100%;min-width:90px;border:1px solid var(--line);border-radius:10px;padding:10px}.row-late{background:#fff0f2}.row-done{background:#effaf5}.footer-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}.message{min-height:22px;margin-top:9px;color:var(--green);font-weight:700;font-size:13px}
     .breaks{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.breaks span{background:#f0f3f8;border-radius:999px;padding:7px 11px;color:#56627a;font-size:12px}
     .sync{border:0;border-radius:999px;padding:8px 11px;font-size:11px;font-weight:800;background:#eef1f6;color:#657089}.sync.ok{background:#e7f7f0;color:var(--green)}.sync.error{background:#fff0f2;color:var(--red)}
-    .notification-on{background:#e7f7f0!important;color:var(--green)!important}.notification-denied{background:#fff0f2!important;color:var(--red)!important}.notification-message{margin-top:10px;font-size:13px;font-weight:700;color:var(--muted)}.notification-message.ok{color:var(--green)}.notification-message.error{color:var(--red)}
+    .notification-on{background:#e7f7f0!important;color:var(--green)!important}.notification-off{background:#eef1f7!important;color:var(--muted)!important}.notification-denied{background:#fff0f2!important;color:var(--red)!important}.notification-message{margin-top:10px;font-size:13px;font-weight:700;color:var(--muted)}.notification-message.ok{color:var(--green)}.notification-message.error{color:var(--red)}
     .alerts{display:grid;gap:8px}.alert-row{display:flex;gap:12px;align-items:center;padding:14px;border-radius:14px;border:1px solid var(--line)}.alert-row.danger{background:#fff0f2;border-color:#f2cbd2}.alert-row.urgent{background:#fff4e6;border-color:#efc68d}.alert-row.warn{background:#fff8e8;border-color:#edd9aa}.alert-row.ok{background:#edf9f4;border-color:#bde4d5}.alert-row b{display:block}.alert-row p{margin:5px 0;line-height:1.55}.alert-row small{display:block;color:var(--muted)}
     .quick-grid{display:grid;grid-template-columns:1.2fr 1fr auto;gap:10px;align-items:end}.quick-grid label{font-size:12px;color:var(--muted);font-weight:700}.quick-grid input,.quick-grid select{display:block;width:100%;margin-top:5px;border:1px solid var(--line);border-radius:11px;padding:10px;background:#fff}
     .history-list{display:grid;gap:8px;margin-top:12px}.history-item{display:flex;justify-content:space-between;gap:12px;padding:12px;background:#f7f9fd;border-radius:12px;font-size:13px}.history-item small{color:var(--muted)}
@@ -157,6 +157,7 @@
     const TEST_MODE_KEY='shipping-cutoff-test-mode';
     const DEVICE_ID_KEY='shipping-cutoff-device-id';
     const VOICE_KEY='shipping-cutoff-voice';
+    const NOTIFICATION_KEY='shipping-cutoff-notification';
     const SB_URL='https://ygbxyejhfeieqhgdymys.supabase.co';
     const SB_KEY='sb_publishable_kQvjwG8nKu1YGM_3qlZ-Vg_ok3jlvIW';
     const SB_HEADERS={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
@@ -166,6 +167,7 @@
     let tomorrowDraft=null;
     let isTestMode=localStorage.getItem(TEST_MODE_KEY)==='1';
     let voiceEnabled=localStorage.getItem(VOICE_KEY)==='1';
+    let notificationEnabled=localStorage.getItem(NOTIFICATION_KEY)!=='0';
     let spokenAlerts=new Set(),notifiedAlerts=new Set();
     const deviceId=localStorage.getItem(DEVICE_ID_KEY)||((crypto.randomUUID?.()||String(Date.now())));localStorage.setItem(DEVICE_ID_KEY,deviceId);
     const defaults=[
@@ -460,8 +462,9 @@
       }
       notificationButton.disabled=false;
       if(Notification.permission==='granted'){
-        notificationButton.textContent='通知：ON';notificationButton.className='secondary notification-on';
-        if(message){notificationMessage.textContent=message;notificationMessage.className='notification-message ok'}
+        notificationButton.textContent=notificationEnabled?'通知：ON':'通知：OFF';
+        notificationButton.className=notificationEnabled?'secondary notification-on':'secondary notification-off';
+        if(message){notificationMessage.textContent=message;notificationMessage.className=notificationEnabled?'notification-message ok':'notification-message'}
       }else if(Notification.permission==='denied'){
         notificationButton.textContent='通知：拒否されています';notificationButton.className='secondary notification-denied';
         if(message){notificationMessage.textContent=message;notificationMessage.className='notification-message error'}
@@ -473,8 +476,18 @@
     async function enableNotifications(){
       if(!('Notification'in window)){renderNotificationState('このブラウザでは通知を利用できません。');return}
       if(Notification.permission==='denied'){renderNotificationState('ブラウザの設定で、このサイトの通知を許可してください。');return}
-      if(Notification.permission!=='granted')await Notification.requestPermission();
       if(Notification.permission==='granted'){
+        notificationEnabled=!notificationEnabled;
+        localStorage.setItem(NOTIFICATION_KEY,notificationEnabled?'1':'0');
+        if(notificationEnabled)notifiedAlerts.clear();
+        renderNotificationState(notificationEnabled?'通知をONにしました。締切リスクを検知するとお知らせします。':'通知をOFFにしました。この端末にはSHIP PACEの通知を出しません。');
+        return
+      }
+      await Notification.requestPermission();
+      if(Notification.permission==='granted'){
+        notificationEnabled=true;
+        localStorage.setItem(NOTIFICATION_KEY,'1');
+        notifiedAlerts.clear();
         renderNotificationState('通知を有効にしました。締切リスクを検知するとお知らせします。');
         try{new Notification('SHIP PACE',{body:'締切前アラートの通知を有効にしました。'})}catch{}
         try{const ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);g.gain.value=.04;o.start();o.stop(ctx.currentTime+.12)}catch{}
@@ -488,7 +501,7 @@
       for(const x of alerts){const key=`${today}-${x.item.id}-${x.tier}-${x.danger?'risk':'time'}`;if(spokenAlerts.has(key))continue;spokenAlerts.add(key);const advice=alertAdvice(x);speak(`${advice.title}。${advice.action}`);break}
     }
     function notifyAlerts(){
-      if(!('Notification'in window)||Notification.permission!=='granted')return;
+      if(!notificationEnabled||!('Notification'in window)||Notification.permission!=='granted')return;
       const alerts=alertRows(groupedRows()),today=dateKey();
       for(const x of alerts){const key=`${today}-${x.item.id}-${x.tier}-${x.danger?'risk':'time'}`;if(notifiedAlerts.has(key))continue;notifiedAlerts.add(key);const advice=alertAdvice(x);new Notification(advice.title,{body:advice.action});break}
     }
