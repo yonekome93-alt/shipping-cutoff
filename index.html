@@ -82,7 +82,7 @@
       let saved={};try{saved=JSON.parse(localStorage.getItem(STORAGE)||'{}')}catch{}
       const old=Array.isArray(saved.waves)?saved.waves:[];
       const newDay=saved.date!==dateKey();
-      return {date:dateKey(),workers:Number(saved.workers)||1,effectiveTime:saved.effectiveTime||'09:30',waves:defaults.map(x=>{const prev=old.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
+      return {date:dateKey(),workers:Number(saved.workers)||1,effectiveTime:saved.effectiveTime||'09:30',waves:defaults.map(x=>{const prev=old.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
     }
     let state=load();
     const persist=()=>localStorage.setItem(STORAGE,JSON.stringify(state));
