@@ -30,8 +30,9 @@
     .ops-status{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.last-sync{font-size:11px;color:var(--muted)}.conflict{padding:14px;border-radius:14px;background:#fff0f2;border:1px solid #f2cbd2;color:#9c3043;margin-bottom:12px}.conflict[hidden]{display:none}
     .audit-actions{display:flex;gap:8px;flex-wrap:wrap}.history-kind{display:inline-block;margin-left:7px;padding:3px 7px;border-radius:999px;background:#edf2ff;color:var(--blue);font-size:10px;font-weight:800}
     .future-panel{border-color:#cbd8ff;background:linear-gradient(180deg,#f7f9ff 0,#fff 42%)}.future-date{font-weight:800;color:var(--blue)}
+    .setup-grid{display:grid;grid-template-columns:1fr 1.45fr;gap:12px;margin-top:16px}.setup-card{border:1px solid var(--line);border-radius:16px;padding:16px;background:#f8faff}.setup-card h3{margin:0 0 5px;font-size:17px}.setup-card>p{margin:0 0 13px;color:var(--muted);font-size:13px;line-height:1.55}.step{display:inline-grid;place-items:center;width:25px;height:25px;margin-right:7px;border-radius:50%;background:var(--blue);color:#fff;font-size:12px}.setup-card .controls{align-items:end}.setup-card .primary{margin-top:8px}
     .auth{position:fixed;inset:0;background:#f3f6fb;z-index:50;display:none;place-items:center;padding:20px}.auth.open{display:grid}.auth-card{width:min(430px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;padding:28px;box-shadow:0 18px 60px rgba(20,33,61,.15)}.auth-card h2{font-size:28px;margin:8px 0}.auth-card p{color:var(--muted);line-height:1.6}.auth-card input{display:block;width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:16px}.auth-card button{width:100%;margin-top:10px}.auth-message{font-size:12px;color:var(--green)}
-    @media(max-width:760px){.shell{padding:14px 12px 55px}.hero,.panel{padding:18px;border-radius:18px}.summary{grid-template-columns:repeat(2,1fr)}.metric strong{font-size:23px}.section-head{align-items:flex-start;flex-direction:column}.pace-grid{grid-template-columns:1fr}.pace-metrics strong{font-size:16px}.controls{width:100%}.controls label{flex:1}.controls input,.controls select{width:100%}.controls button{flex:1}.brand small{display:none}}
+    @media(max-width:760px){.shell{padding:14px 12px 55px}.hero,.panel{padding:18px;border-radius:18px}.summary{grid-template-columns:repeat(2,1fr)}.metric strong{font-size:23px}.section-head{align-items:flex-start;flex-direction:column}.pace-grid,.setup-grid{grid-template-columns:1fr}.pace-metrics strong{font-size:16px}.controls{width:100%}.controls label{flex:1}.controls input,.controls select{width:100%}.controls button{flex:1}.brand small{display:none}}
   </style>
 </head>
 <body>
@@ -58,13 +59,23 @@
       <div id="nextAction" class="next"></div>
       <div class="section-head">
         <div><h2>全方面トータル必要ペース</h2><p id="operationSummaryText">開始時刻から最終締切まで。休憩時間を自動で除外します。</p></div>
-        <div class="controls">
-          <label>オペレーション開始<input id="operationStart" type="time" value="09:30"></label>
-          <label>出荷作業人数<select id="workerCount"><option value="1">1名</option><option value="2">2名</option></select></label>
-          <label>変更時刻<input id="workerTime" type="time"></label>
-          <label>1人の基準能力<input id="onePersonRate" type="number" min="1" value="100"></label>
-          <button class="secondary" onclick="setNow()">今から</button>
-          <button class="primary" onclick="applyWorkers()">開始時刻・人数を反映</button>
+      </div>
+      <div class="setup-grid">
+        <div class="setup-card">
+          <h3><span class="step">1</span>今日の開始時刻を設定</h3>
+          <p>作業を始める時刻です。通常は最初に1回だけ設定します。</p>
+          <div class="controls"><label>開始時刻<input id="operationStart" type="time" value="09:30"></label><button class="primary" onclick="saveOperationStart()">開始時刻を保存</button></div>
+        </div>
+        <div class="setup-card">
+          <h3><span class="step">2</span>途中で人数が変わったとき</h3>
+          <p>例：11:20から2名になった場合に入力します。人数が変わらなければ操作不要です。</p>
+          <div class="controls">
+            <label>変更後の人数<select id="workerCount"><option value="1">1名</option><option value="2">2名</option></select></label>
+            <label>変更した時刻<input id="workerTime" type="time"></label>
+            <label>1人の基準能力<input id="onePersonRate" type="number" min="1" value="100"></label>
+            <button class="secondary" onclick="setNow()">現在時刻を入れる</button>
+            <button class="primary" onclick="applyWorkers()">人数変更を反映</button>
+          </div>
         </div>
       </div>
       <div id="workerResult" class="worker-result"></div>
@@ -152,7 +163,7 @@
     let lastStableState=JSON.parse(JSON.stringify(state));
     const persist=()=>localStorage.setItem(isTestMode?TEST_STORAGE:STORAGE,JSON.stringify(state));
     const snapshotState=value=>{const copy=JSON.parse(JSON.stringify(value));delete copy.auditLog;delete copy.undoStack;delete copy.syncRevision;delete copy.syncDevice;delete copy.changeType;delete copy.cloudUpdatedAt;return copy};
-    const changeLabels={shipping_progress:'進捗保存',shipping_complete:'便を完了',shipping_interval_progress:'時間別進捗',shipping_worker_change:'人数変更',shipping_reset:'実績リセット',shipping_copy_previous:'前日計画複製',shipping_tomorrow_plan:'翌日計画保存',shipping_daily_report:'日報保存',shipping_undo:'操作取消'};
+    const changeLabels={shipping_progress:'進捗保存',shipping_complete:'便を完了',shipping_interval_progress:'時間別進捗',shipping_start_change:'開始時刻変更',shipping_worker_change:'人数変更',shipping_reset:'実績リセット',shipping_copy_previous:'前日計画複製',shipping_tomorrow_plan:'翌日計画保存',shipping_daily_report:'日報保存',shipping_undo:'操作取消'};
     function groupedRows(){
       const groups=[];for(const item of state.waves){let g=groups.find(x=>x.cutoff===item.cutoff);if(!g){g={cutoff:item.cutoff,deadline:minutes(item.cutoff),items:[]};groups.push(g)}g.items.push(item)}
       groups.sort((a,b)=>a.deadline-b.deadline);let cursor=minutes(state.operationStart||'09:30');
@@ -269,8 +280,9 @@
     }
     async function completeWave(id){collect();const item=state.waves.find(x=>x.id===id);if(!item||!item.planned)return;item.completed=item.planned;item.completedAt=new Date().toISOString();state.progressSnapshots.push({id:crypto.randomUUID?.()||String(Date.now()),waveId:id,completed:item.completed,interval:0,at:item.completedAt});await saveState('shipping_complete');const next=groupedRows().find(x=>x.item.planned>0&&x.remaining>0);speak(`${item.area}便が完了しました。${next?`次は${next.item.area}便です。${next.item.cutoff}までに残り${next.remaining}個処理してください。`:'本日の便はすべて完了しました。'}`);saveMessage.textContent=`${item.area}を完了し、次便を再計算しました。`}
     async function saveQuickProgress(){const id=quickWave.value,item=state.waves.find(x=>x.id===id),completed=Math.max(0,Math.round(Number(quickCompleted.value)||0));if(!item)return;item.completed=Math.min(Math.max(completed,0),Math.max(item.planned,completed));const at=new Date().toISOString();state.progressSnapshots.push({id:crypto.randomUUID?.()||String(Date.now()),waveId:id,completed:item.completed,interval:Number(quickInterval.value)||5,at});if(item.planned>0&&item.completed>=item.planned&&!item.completedAt)item.completedAt=at;if(item.completed<item.planned)item.completedAt=null;state.progressSnapshots=state.progressSnapshots.slice(-500);await saveState('shipping_interval_progress');quickResult.scrollIntoView({behavior:'smooth',block:'center'})}
-    async function applyWorkers(){const previousStart=state.operationStart||'09:30',nextStart=operationStart.value||'09:30';state.operationStart=nextStart;state.workers=Math.min(2,Math.max(1,Number(workerCount.value)||1));state.effectiveTime=!workerTime.value||workerTime.value===previousStart?nextStart:workerTime.value;state.onePersonRate=Math.max(1,Number(onePersonRate.value)||100);state.workerChanges.push({time:state.effectiveTime,workers:state.workers,onePersonRate:state.onePersonRate,operationStart:state.operationStart,savedAt:new Date().toISOString()});state.workerChanges=state.workerChanges.slice(-100);await saveState('shipping_worker_change');workerMessage.textContent=`開始時刻を${state.operationStart}、${state.effectiveTime}から${state.workers}名として再計算・保存しました。`}
-    function setNow(){workerTime.value=clock(nowMinutes());workerMessage.textContent='現在時刻を入力しました。人数を選び「この時刻から反映」を押してください。'}
+    async function saveOperationStart(){const previous=state.operationStart||'09:30',next=operationStart.value||'09:30';state.operationStart=next;if(!state.effectiveTime||state.effectiveTime===previous)state.effectiveTime=next;await saveState('shipping_start_change');workerMessage.textContent=`今日の開始時刻を${next}に変更し、必要ペースを再計算しました。`}
+    async function applyWorkers(){state.workers=Math.min(2,Math.max(1,Number(workerCount.value)||1));state.effectiveTime=workerTime.value||state.operationStart||'09:30';state.onePersonRate=Math.max(1,Number(onePersonRate.value)||100);state.workerChanges.push({time:state.effectiveTime,workers:state.workers,onePersonRate:state.onePersonRate,operationStart:state.operationStart,savedAt:new Date().toISOString()});state.workerChanges=state.workerChanges.slice(-100);await saveState('shipping_worker_change');workerMessage.textContent=`${state.effectiveTime}から${state.workers}名として再計算・保存しました。`}
+    function setNow(){workerTime.value=clock(nowMinutes());workerMessage.textContent='現在時刻を入力しました。「変更後の人数」を選び、「人数変更を反映」を押してください。'}
     async function resetToday(){if(!confirm('本日の出荷済み数と完了時刻をリセットしますか？'))return;state.waves.forEach(x=>{x.completed=0;x.completedAt=null});state.progressSnapshots=[];await saveState('shipping_reset');saveMessage.textContent='本日の実績をリセットしました。'}
     async function copyPreviousPlan(){const previous=state.planHistory[0];if(!previous){saveMessage.textContent='複製できる過去計画がありません。';return}state.waves=state.waves.map(x=>{const p=previous.waves.find(y=>y.id===x.id)||{};return{...x,area:p.area||x.area,cutoff:p.cutoff||x.cutoff,planned:Number(p.planned)||0,completed:0,completedAt:null}});state.progressSnapshots=[];await saveState('shipping_copy_previous');saveMessage.textContent=`${previous.date}の計画を本日へ複製しました。`}
     function reportText(){const rows=groupedRows(),completed=state.waves.filter(x=>x.planned>0&&x.completed>=x.planned),late=state.waves.filter(x=>x.completedAt&&minutes(new Date(x.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',hour12:false}))>minutes(x.cutoff)),rates=state.waves.map(x=>actualRateFor(x.id)).filter(Boolean),avg=rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length):0;return `出荷締切ペース 日報\n日付：${state.date}\n開始時刻：${state.operationStart||'09:30'}\n\n【全体】\n計画 ${state.waves.reduce((s,x)=>s+x.planned,0).toLocaleString()}個\n出荷済み ${state.waves.reduce((s,x)=>s+x.completed,0).toLocaleString()}個\n完了 ${completed.length}/${state.waves.length}便\n遅延 ${late.length}便\n平均実績速度 ${avg.toLocaleString()}個/時\n\n【方面別】\n${rows.filter(x=>x.item.planned>0).map(x=>`・${x.item.area} ${x.item.cutoff}締切：${x.item.completed.toLocaleString()}/${x.item.planned.toLocaleString()}個、終了 ${forecastFor(x)}`).join('\n')}\n\n【人数変更】\n${state.workerChanges.length?state.workerChanges.map(x=>`・${x.time}から${x.workers}名`).join('\n'):'変更なし'}`;}
