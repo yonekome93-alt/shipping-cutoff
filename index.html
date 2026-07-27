@@ -140,8 +140,9 @@
       <div id="saveMessage" class="message"></div>
     </section>
     <section class="panel">
-      <div class="section-head"><div><h2>自動日報</h2><p>完了時刻、遅延、人数変更、実績速度をまとめます。</p></div><div class="controls"><button class="secondary" onclick="downloadReport()">テキスト保存</button><button class="primary" onclick="saveDailyReport()">日報を作成・保存</button></div></div>
+      <div class="section-head"><div><h2>自動日報・長期実績</h2><p>日付ごとの実績をクラウドへ蓄積し、将来の曜日別・方面別分析に利用できます。</p></div><div class="controls"><button class="secondary" onclick="downloadReport()">テキスト保存</button><button class="secondary" onclick="downloadReportCsv()">長期実績CSV</button><button class="primary" onclick="saveDailyReport()">日報を作成・保存</button></div></div>
       <textarea id="dailyReport" class="report-box" readonly></textarea>
+      <div id="reportStorageMessage" class="message"></div>
       <div id="reportHistory" class="history-list"></div>
     </section>
     <section class="panel">
@@ -161,7 +162,7 @@
     const SB_HEADERS={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
     const WORKSPACE_ID='4dad83ad-0fb0-451f-b375-49595c06e538';
     const PIN_SESSION='shipping-cutoff-shared-pin';
-    let sharedPinValue='',cloudBusy=false,cloudUpdatedAt='',lastCloudRevision='',saveConflict=false;
+    let sharedPinValue='',cloudBusy=false,cloudUpdatedAt='',lastCloudRevision='',saveConflict=false,longTermReports=[],reportsLoaded=false;
     let tomorrowDraft=null;
     let isTestMode=localStorage.getItem(TEST_MODE_KEY)==='1';
     let voiceEnabled=localStorage.getItem(VOICE_KEY)==='1';
@@ -336,7 +337,7 @@
       if(isTestMode||!pin||cloudBusy)return false;cloudBusy=true;setSync('読込中');
       try{
         const r=await fetch(SB_URL+'/rest/v1/rpc/load_shipping_cutoff_state',{method:'POST',headers:SB_HEADERS,cache:'no-store',body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:pin})});
-        if(!r.ok)throw new Error('invalid');const remote=await r.json();sharedPinValue=pin;localStorage.setItem(PIN_SESSION,pin);if(remote&&remote.date){state={...state,...remote};if(!Array.isArray(state.breaks)||!state.breaks.length)state.breaks=DEFAULT_BREAKS.map(x=>[...x]);persist();lastStableState=JSON.parse(JSON.stringify(state));render()}lastCloudRevision=remote?.syncRevision||'';cloudUpdatedAt=remote?.cloudUpdatedAt||'';lastSyncText.textContent=cloudUpdatedAt?`最終共有 ${new Date(cloudUpdatedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`:'共有データなし';saveConflict=false;conflictBox.hidden=true;setSync('共有済み','ok');return true
+        if(!r.ok)throw new Error('invalid');const remote=await r.json();sharedPinValue=pin;localStorage.setItem(PIN_SESSION,pin);if(remote&&remote.date){state={...state,...remote};if(!Array.isArray(state.breaks)||!state.breaks.length)state.breaks=DEFAULT_BREAKS.map(x=>[...x]);persist();lastStableState=JSON.parse(JSON.stringify(state));render()}lastCloudRevision=remote?.syncRevision||'';cloudUpdatedAt=remote?.cloudUpdatedAt||'';lastSyncText.textContent=cloudUpdatedAt?`最終共有 ${new Date(cloudUpdatedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`:'共有データなし';saveConflict=false;conflictBox.hidden=true;setSync('共有済み','ok');if(!reportsLoaded)await loadLongTermReports(pin);return true
       }catch(e){setSync('PIN未認証','error');return false}finally{cloudBusy=false}
     }
     async function saveState(changeType,{record=true}={}){
@@ -418,13 +419,40 @@
     async function resetToday(){if(!confirm('本日の出荷済み数と完了時刻をリセットしますか？'))return;state.waves.forEach(x=>{x.completed=0;x.completedAt=null});state.progressSnapshots=[];await saveState('shipping_reset');saveMessage.textContent='本日の実績をリセットしました。'}
     async function copyPreviousPlan(){const previous=state.planHistory[0];if(!previous){saveMessage.textContent='複製できる過去計画がありません。';return}state.waves=state.waves.map(x=>{const p=previous.waves.find(y=>y.id===x.id)||{};return{...x,area:p.area||x.area,cutoff:p.cutoff||x.cutoff,planned:Number(p.planned)||0,completed:0,completedAt:null}});state.progressSnapshots=[];await saveState('shipping_copy_previous');saveMessage.textContent=`${previous.date}の計画を本日へ複製しました。`}
     function reportText(){const rows=groupedRows(),completed=state.waves.filter(x=>x.planned>0&&x.completed>=x.planned),late=state.waves.filter(x=>x.completedAt&&minutes(new Date(x.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',hour12:false}))>minutes(x.cutoff)),rates=state.waves.map(x=>actualRateFor(x.id)).filter(Boolean),avg=rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length):0;return `SHIP PACE 日報\n日付：${state.date}\n開始時刻：${state.operationStart||'09:30'}\n\n【全体】\n計画 ${state.waves.reduce((s,x)=>s+x.planned,0).toLocaleString()}個\n出荷済み ${state.waves.reduce((s,x)=>s+x.completed,0).toLocaleString()}個\n完了 ${completed.length}/${state.waves.length}便\n遅延 ${late.length}便\n平均実績速度 ${avg.toLocaleString()}個/時\n\n【方面別】\n${rows.filter(x=>x.item.planned>0).map(x=>`・${x.item.area} ${x.item.cutoff}締切：${x.item.completed.toLocaleString()}/${x.item.planned.toLocaleString()}個、終了 ${forecastFor(x)}`).join('\n')}\n\n【人数変更】\n${state.workerChanges.length?state.workerChanges.map(x=>`・${x.time}から${x.workers}名`).join('\n'):'変更なし'}`;}
-    function renderReports(){dailyReport.value=reportText();reportHistory.innerHTML=state.reports.slice(0,5).map(x=>`<div class="history-item"><span>${x.date}の日報</span><small>${new Date(x.savedAt).toLocaleString('ja-JP')}</small></div>`).join('')}
+    function reportSummary(){
+      const rows=groupedRows(),completed=state.waves.filter(x=>x.planned>0&&x.completed>=x.planned),late=state.waves.filter(x=>x.completedAt&&minutes(new Date(x.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',hour12:false}))>minutes(x.cutoff)),rates=state.waves.map(x=>actualRateFor(x.id)).filter(Boolean);
+      return{date:state.date,operationStart:state.operationStart||'09:30',planned:state.waves.reduce((s,x)=>s+x.planned,0),completed:state.waves.reduce((s,x)=>s+x.completed,0),completedWaves:completed.length,plannedWaves:state.waves.filter(x=>x.planned>0).length,lateWaves:late.length,averageRate:rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length):0,workers:state.workers,onePersonRate:state.onePersonRate,breaks:state.breaks,waves:rows.map(x=>({id:x.item.id,area:x.item.area,cutoff:x.item.cutoff,planned:x.item.planned,completed:x.item.completed,remaining:x.remaining,completedAt:x.item.completedAt||null,actualRate:actualRateFor(x.item.id)})),workerChanges:state.workerChanges};
+    }
+    function renderReports(){
+      dailyReport.value=reportText();const history=longTermReports.length?longTermReports:state.reports;
+      reportStorageMessage.textContent=longTermReports.length?`クラウドに${longTermReports.length}日分の長期実績を保存しています。`:(sharedPinValue?'長期実績はまだありません。日報を保存すると蓄積されます。':'共通PINで共有すると、日報を長期実績としてクラウド保存できます。');
+      reportHistory.innerHTML=history.slice(0,20).map(x=>`<div class="history-item"><span>${escapeHtml(x.report_date||x.date)}の日報</span><small>${new Date(x.updated_at||x.savedAt).toLocaleString('ja-JP')}</small></div>`).join('')||'<div class="history-item"><span>保存済みの日報はまだありません</span></div>';
+    }
     function renderAuditHistory(){
       undoButton.disabled=!state.undoStack.length;
       auditHistory.innerHTML=state.auditLog.length?[...state.auditLog].reverse().slice(0,30).map(x=>`<div class="history-item"><span>${escapeHtml(x.label)}<span class="history-kind">${x.mode==='test'?'テスト':'本番'}</span></span><small>${new Date(x.at).toLocaleString('ja-JP')}</small></div>`).join(''):'<div class="history-item"><span>操作履歴はまだありません</span></div>';
     }
-    async function saveDailyReport(){const text=reportText(),entry={date:state.date,text,savedAt:new Date().toISOString()};state.reports=[entry,...state.reports.filter(x=>x.date!==state.date)].slice(0,60);await saveState('shipping_daily_report');dailyReport.value=text}
+    async function loadLongTermReports(pin=sharedPinValue){
+      if(!pin||isTestMode)return false;
+      try{const r=await fetch(SB_URL+'/rest/v1/rpc/load_shipping_cutoff_reports',{method:'POST',headers:SB_HEADERS,cache:'no-store',body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:pin,input_limit:3650})});if(!r.ok)throw new Error('load reports');longTermReports=await r.json()||[];reportsLoaded=true;renderReports();return true}catch{return false}
+    }
+    async function saveLongTermReport(entry){
+      if(!sharedPinValue||isTestMode)return false;
+      try{const r=await fetch(SB_URL+'/rest/v1/rpc/save_shipping_cutoff_report',{method:'POST',headers:SB_HEADERS,body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:sharedPinValue,input_report_date:entry.date,input_summary:entry.summary,input_report_text:entry.text})});if(!r.ok)throw new Error('save report');reportsLoaded=false;await loadLongTermReports();return true}catch{return false}
+    }
+    async function saveDailyReport(){
+      const text=reportText(),entry={date:state.date,text,summary:reportSummary(),savedAt:new Date().toISOString()};state.reports=[entry,...state.reports.filter(x=>x.date!==state.date)].slice(0,60);await saveState('shipping_daily_report');dailyReport.value=text;
+      if(isTestMode){reportStorageMessage.textContent='テストモードのため、日報はクラウドへ保存していません。';return}
+      if(!sharedPinValue){reportStorageMessage.textContent='日報を端末へ保存しました。長期保存するには共通PINで共有してください。';return}
+      reportStorageMessage.textContent=await saveLongTermReport(entry)?'日報を長期実績としてクラウドへ保存しました。':'端末には保存しましたが、長期保存の初回設定が未完了です。';
+    }
     function downloadReport(){const blob=new Blob([reportText()],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`出荷日報_${state.date}.txt`;a.click();URL.revokeObjectURL(a.href)}
+    function downloadReportCsv(){
+      if(!longTermReports.length){reportStorageMessage.textContent='CSVに出力できる長期実績がまだありません。';return}
+      const quote=v=>`"${String(v??'').replaceAll('"','""')}"`,header=['日付','開始時刻','計画数','出荷済み数','完了便','計画便','遅延便','平均実績速度','最終人数','1人基準能力'],lines=[header.map(quote).join(',')];
+      longTermReports.forEach(x=>{const s=x.summary||{};lines.push([x.report_date,s.operationStart,s.planned,s.completed,s.completedWaves,s.plannedWaves,s.lateWaves,s.averageRate,s.workers,s.onePersonRate].map(quote).join(','))});
+      const blob=new Blob(['\uFEFF'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`SHIP_PACE_長期実績_${dateKey()}.csv`;a.click();URL.revokeObjectURL(a.href);
+    }
     function renderNotificationState(message=''){
       if(!('Notification'in window)){
         notificationButton.textContent='通知：利用不可';notificationButton.className='secondary notification-denied';notificationButton.disabled=true;
