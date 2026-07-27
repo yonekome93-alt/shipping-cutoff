@@ -24,6 +24,7 @@
     .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:16px}table{width:100%;border-collapse:collapse;min-width:690px}th,td{padding:12px;text-align:left;border-bottom:1px solid var(--line)}th{font-size:12px;color:var(--muted);background:#f8faff}td input{width:100%;min-width:90px;border:1px solid var(--line);border-radius:10px;padding:10px}.row-late{background:#fff0f2}.row-done{background:#effaf5}.footer-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}.message{min-height:22px;margin-top:9px;color:var(--green);font-weight:700;font-size:13px}
     .breaks{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.breaks span{background:#f0f3f8;border-radius:999px;padding:7px 11px;color:#56627a;font-size:12px}
     .sync{border:0;border-radius:999px;padding:8px 11px;font-size:11px;font-weight:800;background:#eef1f6;color:#657089}.sync.ok{background:#e7f7f0;color:var(--green)}.sync.error{background:#fff0f2;color:var(--red)}
+    .notification-on{background:#e7f7f0!important;color:var(--green)!important}.notification-denied{background:#fff0f2!important;color:var(--red)!important}.notification-message{margin-top:10px;font-size:13px;font-weight:700;color:var(--muted)}.notification-message.ok{color:var(--green)}.notification-message.error{color:var(--red)}
     .alerts{display:grid;gap:8px}.alert-row{display:flex;gap:12px;align-items:center;padding:14px;border-radius:14px;border:1px solid var(--line)}.alert-row.danger{background:#fff0f2;border-color:#f2cbd2}.alert-row.urgent{background:#fff4e6;border-color:#efc68d}.alert-row.warn{background:#fff8e8;border-color:#edd9aa}.alert-row.ok{background:#edf9f4;border-color:#bde4d5}.alert-row b{display:block}.alert-row p{margin:5px 0;line-height:1.55}.alert-row small{display:block;color:var(--muted)}
     .quick-grid{display:grid;grid-template-columns:1.2fr 1fr auto;gap:10px;align-items:end}.quick-grid label{font-size:12px;color:var(--muted);font-weight:700}.quick-grid input,.quick-grid select{display:block;width:100%;margin-top:5px;border:1px solid var(--line);border-radius:11px;padding:10px;background:#fff}
     .history-list{display:grid;gap:8px;margin-top:12px}.history-item{display:flex;justify-content:space-between;gap:12px;padding:12px;background:#f7f9fd;border-radius:12px;font-size:13px}.history-item small{color:var(--muted)}
@@ -55,8 +56,9 @@
       </div>
     </section>
     <section class="panel">
-      <div class="section-head"><div><h2>締切前アラート</h2><p>残り60分・30分と、現在ペースでは間に合わない便を先回りして知らせます。</p></div><div class="controls"><button id="voiceButton" class="secondary" onclick="toggleVoiceGuide()">音声案内を有効化</button><button class="secondary" onclick="enableNotifications()">通知を有効化</button></div></div>
+      <div class="section-head"><div><h2>締切前アラート</h2><p>残り60分・30分と、現在ペースでは間に合わない便を先回りして知らせます。</p></div><div class="controls"><button id="voiceButton" class="secondary" onclick="toggleVoiceGuide()">音声案内を有効化</button><button id="notificationButton" class="secondary" onclick="enableNotifications()">通知を有効化</button></div></div>
       <div id="alertList" class="alerts"></div>
+      <div id="notificationMessage" class="notification-message" aria-live="polite"></div>
     </section>
     <section class="panel">
       <div id="nextAction" class="next"></div>
@@ -254,6 +256,7 @@
     function render(){
       const now=nowMinutes(),rows=groupedRows(),pending=rows.filter(x=>x.item.planned>0&&x.remaining>0),done=rows.filter(x=>x.item.planned>0&&x.remaining===0).length;
       testModeBar.hidden=!isTestMode;testModeButton.textContent=isTestMode?'本番へ戻る':'テストモード';voiceButton.textContent=voiceEnabled?'音声案内：ON':'音声案内を有効化';
+      renderNotificationState();
       tomorrowPlanDate.min=offsetDateKey(1);if(!tomorrowPlanDate.value||tomorrowPlanDate.value<=dateKey())tomorrowPlanDate.value=offsetDateKey(1);
       operationStart.value=state.operationStart||'09:30';operationSummaryText.textContent=`${state.operationStart||'09:30'}から最終締切まで。休憩時間を自動で除外します。`;
       doneSummary.textContent=`${done}／${state.waves.length}便`;soonSummary.textContent=`${pending.filter(x=>x.deadline>now&&x.deadline-now<=60).length}便`;lateSummary.textContent=`${pending.filter(x=>now>=x.deadline).length}便`;remainSummary.textContent=`${pending.reduce((s,x)=>s+x.remaining,0).toLocaleString()}個`;
@@ -412,7 +415,34 @@
     }
     async function saveDailyReport(){const text=reportText(),entry={date:state.date,text,savedAt:new Date().toISOString()};state.reports=[entry,...state.reports.filter(x=>x.date!==state.date)].slice(0,60);await saveState('shipping_daily_report');dailyReport.value=text}
     function downloadReport(){const blob=new Blob([reportText()],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`出荷日報_${state.date}.txt`;a.click();URL.revokeObjectURL(a.href)}
-    async function enableNotifications(){if('Notification'in window&&Notification.permission!=='granted')await Notification.requestPermission();try{const ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);g.gain.value=.04;o.start();o.stop(ctx.currentTime+.12)}catch{}}
+    function renderNotificationState(message=''){
+      if(!('Notification'in window)){
+        notificationButton.textContent='通知：利用不可';notificationButton.className='secondary notification-denied';notificationButton.disabled=true;
+        if(message){notificationMessage.textContent=message;notificationMessage.className='notification-message error'}return
+      }
+      notificationButton.disabled=false;
+      if(Notification.permission==='granted'){
+        notificationButton.textContent='通知：ON';notificationButton.className='secondary notification-on';
+        if(message){notificationMessage.textContent=message;notificationMessage.className='notification-message ok'}
+      }else if(Notification.permission==='denied'){
+        notificationButton.textContent='通知：拒否されています';notificationButton.className='secondary notification-denied';
+        if(message){notificationMessage.textContent=message;notificationMessage.className='notification-message error'}
+      }else{
+        notificationButton.textContent='通知を有効化';notificationButton.className='secondary';
+        if(message){notificationMessage.textContent=message;notificationMessage.className='notification-message'}
+      }
+    }
+    async function enableNotifications(){
+      if(!('Notification'in window)){renderNotificationState('このブラウザでは通知を利用できません。');return}
+      if(Notification.permission==='denied'){renderNotificationState('ブラウザの設定で、このサイトの通知を許可してください。');return}
+      if(Notification.permission!=='granted')await Notification.requestPermission();
+      if(Notification.permission==='granted'){
+        renderNotificationState('通知を有効にしました。締切リスクを検知するとお知らせします。');
+        try{new Notification('SHIP PACE',{body:'締切前アラートの通知を有効にしました。'})}catch{}
+        try{const ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);g.gain.value=.04;o.start();o.stop(ctx.currentTime+.12)}catch{}
+      }else if(Notification.permission==='denied')renderNotificationState('通知が拒否されました。ブラウザの設定から許可できます。');
+      else renderNotificationState('通知はまだ有効になっていません。');
+    }
     function speak(text){if(!voiceEnabled||!('speechSynthesis'in window))return;const utterance=new SpeechSynthesisUtterance(text);utterance.lang='ja-JP';utterance.rate=.95;window.speechSynthesis.cancel();window.speechSynthesis.speak(utterance)}
     function toggleVoiceGuide(){voiceEnabled=!voiceEnabled;localStorage.setItem(VOICE_KEY,voiceEnabled?'1':'0');if(voiceEnabled)speak('音声案内を有効にしました。');else if('speechSynthesis'in window)window.speechSynthesis.cancel();render()}
     function announceAlerts(){
