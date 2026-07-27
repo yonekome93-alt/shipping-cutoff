@@ -29,6 +29,7 @@
     .mode-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-6px 0 18px;padding:12px 15px;border-radius:14px;background:#fff8e8;border:1px solid #edd9aa;color:#7b5519}.mode-bar[hidden]{display:none}.mode-bar b{display:block}.mode-bar small{display:block;margin-top:2px}
     .ops-status{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.last-sync{font-size:11px;color:var(--muted)}.conflict{padding:14px;border-radius:14px;background:#fff0f2;border:1px solid #f2cbd2;color:#9c3043;margin-bottom:12px}.conflict[hidden]{display:none}
     .audit-actions{display:flex;gap:8px;flex-wrap:wrap}.history-kind{display:inline-block;margin-left:7px;padding:3px 7px;border-radius:999px;background:#edf2ff;color:var(--blue);font-size:10px;font-weight:800}
+    .future-panel{border-color:#cbd8ff;background:linear-gradient(180deg,#f7f9ff 0,#fff 42%)}.future-date{font-weight:800;color:var(--blue)}
     .auth{position:fixed;inset:0;background:#f3f6fb;z-index:50;display:none;place-items:center;padding:20px}.auth.open{display:grid}.auth-card{width:min(430px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;padding:28px;box-shadow:0 18px 60px rgba(20,33,61,.15)}.auth-card h2{font-size:28px;margin:8px 0}.auth-card p{color:var(--muted);line-height:1.6}.auth-card input{display:block;width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:16px}.auth-card button{width:100%;margin-top:10px}.auth-message{font-size:12px;color:var(--green)}
     @media(max-width:760px){.shell{padding:14px 12px 55px}.hero,.panel{padding:18px;border-radius:18px}.summary{grid-template-columns:repeat(2,1fr)}.metric strong{font-size:23px}.section-head{align-items:flex-start;flex-direction:column}.pace-grid{grid-template-columns:1fr}.pace-metrics strong{font-size:16px}.controls{width:100%}.controls label{flex:1}.controls input,.controls select{width:100%}.controls button{flex:1}.brand small{display:none}}
   </style>
@@ -84,6 +85,11 @@
       <div class="section-head"><div><h2>締切間の必要処理ペース</h2><p>前便が早く完了した場合、その完了時刻から次便を再計算します。</p></div></div>
       <div id="paceGrid" class="pace-grid"></div>
     </section>
+    <section class="panel future-panel">
+      <div class="section-head"><div><div class="eyebrow">NEXT DAY PLAN</div><h2>翌日分の出荷計画</h2><p>当日中に翌日の方面別計画数を準備できます。当日実績とは別に保存・共有されます。</p></div><div class="controls"><label>計画日<input id="tomorrowPlanDate" class="future-date" type="date" onchange="renderTomorrowPlan()"></label><button class="primary" onclick="saveTomorrowPlan()">翌日計画を保存</button></div></div>
+      <div class="table-wrap"><table><thead><tr><th>方面／便</th><th>締切</th><th>翌日計画数</th></tr></thead><tbody id="tomorrowRows"></tbody></table></div>
+      <div id="tomorrowMessage" class="message"></div>
+    </section>
     <section class="panel">
       <div class="section-head"><div><h2>方面別 出荷締切</h2><p>計画数と出荷済み数を入力してください。計画達成時刻も自動保存します。</p></div><button class="secondary" onclick="copyPreviousPlan()">前日計画を複製</button></div>
       <div class="table-wrap"><table><thead><tr><th>方面／便</th><th>締切</th><th>計画数</th><th>出荷済み</th><th>残数</th><th>終了予測</th><th>必要人数</th><th>操作</th></tr></thead><tbody id="cutoffRows"></tbody></table></div>
@@ -125,6 +131,7 @@
     ];
     const breaks=[[630,645],[720,780],[930,945]];
     const dateKey=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+    const offsetDateKey=days=>{const d=new Date();d.setDate(d.getDate()+days);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
     const minutes=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
     const clock=m=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
     const nowMinutes=()=>{const d=new Date();return d.getHours()*60+d.getMinutes()};
@@ -134,14 +141,16 @@
       const old=Array.isArray(saved.waves)?saved.waves:[];
       const newDay=saved.date!==dateKey();
       const planHistory=Array.isArray(saved.planHistory)?saved.planHistory:[];
+      const futurePlans=saved.futurePlans&&typeof saved.futurePlans==='object'?saved.futurePlans:{};
+      const sourceWaves=newDay&&Array.isArray(futurePlans[dateKey()])?futurePlans[dateKey()]:old;
       if(newDay&&saved.date&&old.some(x=>Number(x.planned)>0)&&!planHistory.some(x=>x.date===saved.date))planHistory.unshift({date:saved.date,waves:old.map(x=>({id:x.id,area:x.area,cutoff:x.cutoff,planned:Number(x.planned)||0})),savedAt:new Date().toISOString()});
-      return {date:dateKey(),workers:Number(saved.workers)||1,effectiveTime:saved.effectiveTime||'09:30',onePersonRate:Math.max(1,Number(saved.onePersonRate)||100),workerChanges:Array.isArray(saved.workerChanges)?saved.workerChanges:[],progressSnapshots:newDay?[]:(Array.isArray(saved.progressSnapshots)?saved.progressSnapshots:[]),planHistory:planHistory.slice(0,60),reports:Array.isArray(saved.reports)?saved.reports:[],auditLog:Array.isArray(saved.auditLog)?saved.auditLog:[],undoStack:Array.isArray(saved.undoStack)?saved.undoStack:[],syncRevision:saved.syncRevision||'',syncDevice:saved.syncDevice||'',waves:defaults.map(x=>{const prev=old.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
+      return {date:dateKey(),workers:Number(saved.workers)||1,effectiveTime:saved.effectiveTime||'09:30',onePersonRate:Math.max(1,Number(saved.onePersonRate)||100),workerChanges:Array.isArray(saved.workerChanges)?saved.workerChanges:[],progressSnapshots:newDay?[]:(Array.isArray(saved.progressSnapshots)?saved.progressSnapshots:[]),planHistory:planHistory.slice(0,60),futurePlans,reports:Array.isArray(saved.reports)?saved.reports:[],auditLog:Array.isArray(saved.auditLog)?saved.auditLog:[],undoStack:Array.isArray(saved.undoStack)?saved.undoStack:[],syncRevision:saved.syncRevision||'',syncDevice:saved.syncDevice||'',waves:defaults.map(x=>{const prev=sourceWaves.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
     }
     let state=load();
     let lastStableState=JSON.parse(JSON.stringify(state));
     const persist=()=>localStorage.setItem(isTestMode?TEST_STORAGE:STORAGE,JSON.stringify(state));
     const snapshotState=value=>{const copy=JSON.parse(JSON.stringify(value));delete copy.auditLog;delete copy.undoStack;delete copy.syncRevision;delete copy.syncDevice;delete copy.changeType;delete copy.cloudUpdatedAt;return copy};
-    const changeLabels={shipping_progress:'進捗保存',shipping_complete:'便を完了',shipping_interval_progress:'時間別進捗',shipping_worker_change:'人数変更',shipping_reset:'実績リセット',shipping_copy_previous:'前日計画複製',shipping_daily_report:'日報保存',shipping_undo:'操作取消'};
+    const changeLabels={shipping_progress:'進捗保存',shipping_complete:'便を完了',shipping_interval_progress:'時間別進捗',shipping_worker_change:'人数変更',shipping_reset:'実績リセット',shipping_copy_previous:'前日計画複製',shipping_tomorrow_plan:'翌日計画保存',shipping_daily_report:'日報保存',shipping_undo:'操作取消'};
     function groupedRows(){
       const groups=[];for(const item of state.waves){let g=groups.find(x=>x.cutoff===item.cutoff);if(!g){g={cutoff:item.cutoff,deadline:minutes(item.cutoff),items:[]};groups.push(g)}g.items.push(item)}
       groups.sort((a,b)=>a.deadline-b.deadline);let cursor=570;
@@ -171,11 +180,12 @@
     function render(){
       const now=nowMinutes(),rows=groupedRows(),pending=rows.filter(x=>x.item.planned>0&&x.remaining>0),done=rows.filter(x=>x.item.planned>0&&x.remaining===0).length;
       testModeBar.hidden=!isTestMode;testModeButton.textContent=isTestMode?'本番へ戻る':'テストモード';voiceButton.textContent=voiceEnabled?'音声案内：ON':'音声案内を有効化';
+      tomorrowPlanDate.min=offsetDateKey(1);if(!tomorrowPlanDate.value||tomorrowPlanDate.value<=dateKey())tomorrowPlanDate.value=offsetDateKey(1);
       doneSummary.textContent=`${done}／${state.waves.length}便`;soonSummary.textContent=`${pending.filter(x=>x.deadline>now&&x.deadline-now<=60).length}便`;lateSummary.textContent=`${pending.filter(x=>now>=x.deadline).length}便`;remainSummary.textContent=`${pending.reduce((s,x)=>s+x.remaining,0).toLocaleString()}個`;
       workerCount.value=String(state.workers);workerTime.value=state.effectiveTime;onePersonRate.value=state.onePersonRate;
       quickWave.innerHTML=state.waves.map(x=>`<option value="${x.id}">${escapeHtml(x.area)}（${x.cutoff}）</option>`).join('');
       const selected=state.waves.find(x=>x.id===quickWave.value)||state.waves[0];quickWave.value=selected.id;quickCompleted.value=selected.completed;
-      renderNext(pending[0],now);renderWorker(pending,now);renderCards(rows,now);renderTable(rows,now);renderAlerts(rows,now);renderWorkerHistory();renderQuickResult(selected.id);renderReports();renderAuditHistory();
+      renderNext(pending[0],now);renderWorker(pending,now);renderCards(rows,now);renderTable(rows,now);renderTomorrowPlan();renderAlerts(rows,now);renderWorkerHistory();renderQuickResult(selected.id);renderReports();renderAuditHistory();
     }
     function renderNext(next,now){
       if(!state.waves.some(x=>x.planned)){nextAction.innerHTML='<small>NEXT ACTION</small><h3>方面別の計画数を入力してください</h3><p>計画数を保存すると必要処理速度を計算します。</p>';return}
@@ -203,6 +213,16 @@
     }
     function renderTable(rows,now){
       cutoffRows.innerHTML=state.waves.map(x=>{const row=rows.find(r=>r.item.id===x.id),remain=Math.max(0,x.planned-x.completed),done=x.planned>0&&remain===0,late=x.planned>0&&remain>0&&now>=minutes(x.cutoff),needed=row?requiredWorkersFor(row,now):0;return `<tr class="${done?'row-done':late?'row-late':''}"><td><input data-field="area" data-id="${x.id}" value="${escapeHtml(x.area)}"></td><td><input data-field="cutoff" data-id="${x.id}" type="time" value="${x.cutoff}"></td><td><input data-field="planned" data-id="${x.id}" type="number" min="0" value="${x.planned}"></td><td><input data-field="completed" data-id="${x.id}" type="number" min="0" value="${x.completed}"></td><td>${remain.toLocaleString()}個</td><td>${x.planned&&row?forecastFor(row,now):'-'}</td><td>${x.planned?(needed>=99?'至急':needed+'名'):'-'}</td><td><button class="primary" onclick="completeWave('${x.id}')" ${!x.planned||done?'disabled':''}>完了</button></td></tr>`}).join('');
+    }
+    function renderTomorrowPlan(){
+      const target=tomorrowPlanDate.value||offsetDateKey(1),saved=Array.isArray(state.futurePlans?.[target])?state.futurePlans[target]:[];
+      tomorrowRows.innerHTML=defaults.map(x=>{const current=state.waves.find(y=>y.id===x.id)||x,plan=saved.find(y=>y.id===x.id)||{};return `<tr><td><input data-future-field="area" data-id="${x.id}" value="${escapeHtml(plan.area||current.area||x.area)}"></td><td><input data-future-field="cutoff" data-id="${x.id}" type="time" value="${plan.cutoff||current.cutoff||x.cutoff}"></td><td><input data-future-field="planned" data-id="${x.id}" type="number" min="0" value="${Number(plan.planned)||0}"></td></tr>`}).join('');
+      tomorrowMessage.textContent=saved.length?`${target}の計画を保存済みです。日付が変わると本日の計画へ自動反映されます。`:'';
+    }
+    async function saveTomorrowPlan(){
+      const target=tomorrowPlanDate.value;if(!target||target<=dateKey()){tomorrowMessage.textContent='翌日以降の日付を選択してください。';return}
+      const rows=defaults.map(x=>{const inputs=[...document.querySelectorAll(`#tomorrowRows [data-id="${x.id}"]`)],get=field=>inputs.find(i=>i.dataset.futureField===field)?.value;return{id:x.id,area:get('area')||x.area,cutoff:get('cutoff')||x.cutoff,planned:Math.max(0,Math.round(Number(get('planned'))||0))}});
+      state.futurePlans={...(state.futurePlans||{}),[target]:rows};await saveState('shipping_tomorrow_plan');tomorrowMessage.textContent=`${target}の翌日計画を保存・共有しました。`;
     }
     function collect(){
       document.querySelectorAll('#cutoffRows input').forEach(input=>{const item=state.waves.find(x=>x.id===input.dataset.id);if(!item)return;const f=input.dataset.field;if(f==='planned'||f==='completed')item[f]=Math.max(0,Math.round(Number(input.value)||0));else item[f]=input.value||item[f]});
