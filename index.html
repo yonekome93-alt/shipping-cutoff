@@ -21,12 +21,18 @@
     .pace-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.pace-card{border:1px solid var(--line);border-top:4px solid var(--tone);border-radius:17px;padding:17px;background:var(--card-bg)}.pace-card header{margin:0 0 10px}.pace-card h3{margin:0;font-size:20px}.status{font-size:12px;color:var(--tone);font-weight:900}.window{color:var(--muted);font-size:13px}.pace-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.pace-metrics div{background:rgba(255,255,255,.72);border-radius:12px;padding:10px}.pace-metrics small{display:block;color:var(--muted);font-size:11px}.pace-metrics strong{display:block;margin-top:4px;font-size:18px}.note{font-size:13px;margin:12px 0 0;line-height:1.5}
     .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:16px}table{width:100%;border-collapse:collapse;min-width:690px}th,td{padding:12px;text-align:left;border-bottom:1px solid var(--line)}th{font-size:12px;color:var(--muted);background:#f8faff}td input{width:100%;min-width:90px;border:1px solid var(--line);border-radius:10px;padding:10px}.row-late{background:#fff0f2}.row-done{background:#effaf5}.footer-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}.message{min-height:22px;margin-top:9px;color:var(--green);font-weight:700;font-size:13px}
     .breaks{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.breaks span{background:#f0f3f8;border-radius:999px;padding:7px 11px;color:#56627a;font-size:12px}
+    .sync{border:0;border-radius:999px;padding:8px 11px;font-size:11px;font-weight:800;background:#eef1f6;color:#657089}.sync.ok{background:#e7f7f0;color:var(--green)}.sync.error{background:#fff0f2;color:var(--red)}
+    .alerts{display:grid;gap:8px}.alert-row{display:flex;gap:12px;align-items:center;padding:14px;border-radius:14px;border:1px solid var(--line)}.alert-row.danger{background:#fff0f2;border-color:#f2cbd2}.alert-row.warn{background:#fff8e8;border-color:#edd9aa}.alert-row.ok{background:#edf9f4;border-color:#bde4d5}.alert-row b{display:block}.alert-row small{color:var(--muted)}
+    .quick-grid{display:grid;grid-template-columns:1.2fr .7fr 1fr auto;gap:10px;align-items:end}.quick-grid label{font-size:12px;color:var(--muted);font-weight:700}.quick-grid input,.quick-grid select{display:block;width:100%;margin-top:5px;border:1px solid var(--line);border-radius:11px;padding:10px;background:#fff}
+    .history-list{display:grid;gap:8px;margin-top:12px}.history-item{display:flex;justify-content:space-between;gap:12px;padding:12px;background:#f7f9fd;border-radius:12px;font-size:13px}.history-item small{color:var(--muted)}
+    .report-box{width:100%;min-height:260px;border:1px solid var(--line);border-radius:14px;padding:14px;line-height:1.7;background:#f9fbfe;color:var(--ink)}
+    .auth{position:fixed;inset:0;background:#f3f6fb;z-index:50;display:none;place-items:center;padding:20px}.auth.open{display:grid}.auth-card{width:min(430px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;padding:28px;box-shadow:0 18px 60px rgba(20,33,61,.15)}.auth-card h2{font-size:28px;margin:8px 0}.auth-card p{color:var(--muted);line-height:1.6}.auth-card input{display:block;width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:16px}.auth-card button{width:100%;margin-top:10px}.auth-message{font-size:12px;color:var(--green)}
     @media(max-width:760px){.shell{padding:14px 12px 55px}.hero,.panel{padding:18px;border-radius:18px}.summary{grid-template-columns:repeat(2,1fr)}.metric strong{font-size:23px}.section-head{align-items:flex-start;flex-direction:column}.pace-grid{grid-template-columns:1fr}.pace-metrics strong{font-size:16px}.controls{width:100%}.controls label{flex:1}.controls input,.controls select{width:100%}.controls button{flex:1}.brand small{display:none}}
   </style>
 </head>
 <body>
   <main class="shell">
-    <header><div class="brand"><div class="mark">出</div><div><b>出荷締切ペース</b><small>方面別オペレーション</small></div></div><div class="live"><i></i>LIVE</div></header>
+    <header><div class="brand"><div class="mark">出</div><div><b>出荷締切ペース</b><small>方面別オペレーション</small></div></div><button id="syncStatus" class="sync" onclick="openLogin()">端末保存</button><div class="live"><i></i>LIVE</div></header>
     <section class="hero">
       <div class="eyebrow">SHIPPING CUTOFF CONTROL</div>
       <h1>締切から、いま必要な速さを。</h1>
@@ -39,12 +45,17 @@
       </div>
     </section>
     <section class="panel">
+      <div class="section-head"><div><h2>締切前アラート</h2><p>残り30分と、現在ペースでは間に合わない便を自動検知します。</p></div><button class="secondary" onclick="enableNotifications()">通知と音を有効化</button></div>
+      <div id="alertList" class="alerts"></div>
+    </section>
+    <section class="panel">
       <div id="nextAction" class="next"></div>
       <div class="section-head">
         <div><h2>全方面トータル必要ペース</h2><p>9:30から最終締切まで。休憩時間を自動で除外します。</p></div>
         <div class="controls">
           <label>出荷作業人数<select id="workerCount"><option value="1">1名</option><option value="2">2名</option></select></label>
           <label>変更時刻<input id="workerTime" type="time"></label>
+          <label>1人の基準能力<input id="onePersonRate" type="number" min="1" value="100"></label>
           <button class="secondary" onclick="setNow()">今から</button>
           <button class="primary" onclick="applyWorkers()">この時刻から反映</button>
         </div>
@@ -52,20 +63,41 @@
       <div id="workerResult" class="worker-result"></div>
       <div class="breaks"><span>10:30〜10:45 休憩</span><span>12:00〜13:00 休憩</span><span>15:30〜15:45 休憩</span></div>
       <div id="workerMessage" class="message"></div>
+      <div id="workerHistory" class="history-list"></div>
+    </section>
+    <section class="panel">
+      <div class="section-head"><div><h2>5分・15分ごとの進捗入力</h2><p>累計出荷済み数から実績速度、計画差、終了見込みを更新します。</p></div></div>
+      <div class="quick-grid">
+        <label>方面／便<select id="quickWave"></select></label>
+        <label>入力間隔<select id="quickInterval"><option value="5">5分</option><option value="15">15分</option></select></label>
+        <label>現在の累計出荷済み数<input id="quickCompleted" type="number" min="0" value="0"></label>
+        <button class="primary" onclick="saveQuickProgress()">進捗を保存</button>
+      </div>
+      <div id="quickResult" class="worker-result"></div>
     </section>
     <section class="panel">
       <div class="section-head"><div><h2>締切間の必要処理ペース</h2><p>前便が早く完了した場合、その完了時刻から次便を再計算します。</p></div></div>
       <div id="paceGrid" class="pace-grid"></div>
     </section>
     <section class="panel">
-      <div class="section-head"><div><h2>方面別 出荷締切</h2><p>計画数と出荷済み数を入力してください。計画達成時刻も自動保存します。</p></div></div>
-      <div class="table-wrap"><table><thead><tr><th>方面／便</th><th>締切</th><th>計画数</th><th>出荷済み</th><th>残数</th><th>判定</th></tr></thead><tbody id="cutoffRows"></tbody></table></div>
+      <div class="section-head"><div><h2>方面別 出荷締切</h2><p>計画数と出荷済み数を入力してください。計画達成時刻も自動保存します。</p></div><button class="secondary" onclick="copyPreviousPlan()">前日計画を複製</button></div>
+      <div class="table-wrap"><table><thead><tr><th>方面／便</th><th>締切</th><th>計画数</th><th>出荷済み</th><th>残数</th><th>終了予測</th><th>必要人数</th><th>操作</th></tr></thead><tbody id="cutoffRows"></tbody></table></div>
       <div class="footer-actions"><button class="secondary" onclick="resetToday()">本日の実績をリセット</button><button class="primary" onclick="saveProgress()">進捗を保存・再計算</button></div>
       <div id="saveMessage" class="message"></div>
     </section>
+    <section class="panel">
+      <div class="section-head"><div><h2>自動日報</h2><p>完了時刻、遅延、人数変更、実績速度をまとめます。</p></div><div class="controls"><button class="secondary" onclick="downloadReport()">テキスト保存</button><button class="primary" onclick="saveDailyReport()">日報を作成・保存</button></div></div>
+      <textarea id="dailyReport" class="report-box" readonly></textarea>
+      <div id="reportHistory" class="history-list"></div>
+    </section>
   </main>
+  <div id="authScreen" class="auth"><section class="auth-card"><div class="eyebrow">CLOUD SHARING</div><h2>クラウド共有</h2><p>LOGI FLOWと同じ登録メールで認証すると、スマホとパソコンで同じ進捗を共有できます。</p><input id="loginEmail" type="email" placeholder="メールアドレス"><button class="primary" onclick="sendLoginLink()">認証メールを送る</button><button class="secondary" onclick="closeLogin()">端末保存のまま使う</button><p id="authMessage" class="auth-message"></p></section></div>
   <script>
     const STORAGE='shipping-cutoff-standalone-v1';
+    const SB_URL='https://ygbxyejhfeieqhgdymys.supabase.co';
+    const SB_KEY='sb_publishable_kQvjwG8nKu1YGM_3qlZ-Vg_ok3jlvIW';
+    const SB_HEADERS={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
+    let authSession=null,currentProfile=null,cloudBusy=false,cloudUpdatedAt='';
     const defaults=[
       {id:'kyushu-am',area:'九州①',cutoff:'10:00'},{id:'okinawa',area:'沖縄',cutoff:'11:00'},
       {id:'shikoku',area:'四国',cutoff:'12:00'},{id:'chugoku',area:'中国',cutoff:'12:00'},
@@ -82,7 +114,9 @@
       let saved={};try{saved=JSON.parse(localStorage.getItem(STORAGE)||'{}')}catch{}
       const old=Array.isArray(saved.waves)?saved.waves:[];
       const newDay=saved.date!==dateKey();
-      return {date:dateKey(),workers:Number(saved.workers)||1,effectiveTime:saved.effectiveTime||'09:30',waves:defaults.map(x=>{const prev=old.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
+      const planHistory=Array.isArray(saved.planHistory)?saved.planHistory:[];
+      if(newDay&&saved.date&&old.some(x=>Number(x.planned)>0)&&!planHistory.some(x=>x.date===saved.date))planHistory.unshift({date:saved.date,waves:old.map(x=>({id:x.id,area:x.area,cutoff:x.cutoff,planned:Number(x.planned)||0})),savedAt:new Date().toISOString()});
+      return {date:dateKey(),workers:Number(saved.workers)||1,effectiveTime:saved.effectiveTime||'09:30',onePersonRate:Math.max(1,Number(saved.onePersonRate)||100),workerChanges:Array.isArray(saved.workerChanges)?saved.workerChanges:[],progressSnapshots:newDay?[]:(Array.isArray(saved.progressSnapshots)?saved.progressSnapshots:[]),planHistory:planHistory.slice(0,60),reports:Array.isArray(saved.reports)?saved.reports:[],waves:defaults.map(x=>{const prev=old.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
     }
     let state=load();
     const persist=()=>localStorage.setItem(STORAGE,JSON.stringify(state));
@@ -98,11 +132,27 @@
         return g.items.map(x=>({item:x,start,deadline:g.deadline,remaining:Math.max(0,x.planned-x.completed),groupRemaining:remaining,groupCount:g.items.length,work,rate,per15:Math.ceil(rate/4)}));
       });
     }
+    function snapshotsFor(id){return state.progressSnapshots.filter(x=>x.waveId===id).sort((a,b)=>String(a.at).localeCompare(String(b.at)))}
+    function actualRateFor(id){
+      const list=snapshotsFor(id);if(list.length<2)return 0;const a=list[list.length-2],b=list[list.length-1],mins=Math.max(1,(new Date(b.at)-new Date(a.at))/60000),qty=Math.max(0,Number(b.completed)-Number(a.completed));return Math.round(qty/(mins/60))
+    }
+    function forecastFor(row,now=nowMinutes()){
+      if(row.remaining<=0)return row.item.completedAt?new Date(row.item.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'完了';
+      const rate=actualRateFor(row.item.id);if(!rate)return'実績待ち';const finish=now+Math.ceil(row.remaining/rate*60);return finish>=1440?'翌日 '+clock(finish%1440):clock(finish)
+    }
+    function requiredWorkersFor(row,now=nowMinutes()){
+      if(row.remaining<=0)return 0;const work=workingMinutes(Math.max(now,row.start),row.deadline);if(work<=0)return 99;return Math.max(1,Math.ceil((row.groupRemaining/(work/60))/state.onePersonRate))
+    }
+    function alertRows(rows,now=nowMinutes()){
+      return rows.filter(x=>x.item.planned>0&&x.remaining>0).map(x=>{const rate=actualRateFor(x.item.id),forecast=rate?now+Math.ceil(x.remaining/rate*60):null,mins=x.deadline-now,danger=mins<=0||(forecast!==null&&forecast>x.deadline),soon=mins>0&&mins<=30;return{...x,rate,forecast,mins,danger,soon}}).filter(x=>x.danger||x.soon)
+    }
     function render(){
       const now=nowMinutes(),rows=groupedRows(),pending=rows.filter(x=>x.item.planned>0&&x.remaining>0),done=rows.filter(x=>x.item.planned>0&&x.remaining===0).length;
       doneSummary.textContent=`${done}／${state.waves.length}便`;soonSummary.textContent=`${pending.filter(x=>x.deadline>now&&x.deadline-now<=60).length}便`;lateSummary.textContent=`${pending.filter(x=>now>=x.deadline).length}便`;remainSummary.textContent=`${pending.reduce((s,x)=>s+x.remaining,0).toLocaleString()}個`;
-      workerCount.value=String(state.workers);workerTime.value=state.effectiveTime;
-      renderNext(pending[0],now);renderWorker(pending,now);renderCards(rows,now);renderTable(rows,now);
+      workerCount.value=String(state.workers);workerTime.value=state.effectiveTime;onePersonRate.value=state.onePersonRate;
+      quickWave.innerHTML=state.waves.map(x=>`<option value="${x.id}">${escapeHtml(x.area)}（${x.cutoff}）</option>`).join('');
+      const selected=state.waves.find(x=>x.id===quickWave.value)||state.waves[0];quickWave.value=selected.id;quickCompleted.value=selected.completed;
+      renderNext(pending[0],now);renderWorker(pending,now);renderCards(rows,now);renderTable(rows,now);renderAlerts(rows,now);renderWorkerHistory();renderQuickResult(selected.id);renderReports();
     }
     function renderNext(next,now){
       if(!state.waves.some(x=>x.planned)){nextAction.innerHTML='<small>NEXT ACTION</small><h3>方面別の計画数を入力してください</h3><p>計画数を保存すると必要処理速度を計算します。</p>';return}
@@ -112,26 +162,67 @@
       nextAction.innerHTML=`<small>NEXT ACTION・次に処理する便</small><h3>${escapeHtml(next.item.area)}を${next.item.cutoff}までに残り${next.remaining.toLocaleString()}個</h3><p>${clock(next.start)}からの枠で、現在時刻から必要なチーム速度は <b>${rate}</b> です。</p>`;
     }
     function renderWorker(pending,now){
-      const total=pending.reduce((s,x)=>s+x.remaining,0),final=pending.length?Math.max(...pending.map(x=>x.deadline)):1020,start=Math.max(now,minutes(state.effectiveTime),570),work=Math.max(1,workingMinutes(start,final)),team=Math.ceil(total/(work/60)),person=Math.ceil(team/state.workers),per15=Math.ceil(person/4);
-      workerResult.innerHTML=`<strong>${state.effectiveTime}から${state.workers}名：1人あたり ${person.toLocaleString()}個/時・${per15.toLocaleString()}個/15分</strong><p>残り${total.toLocaleString()}個／最終締切${clock(final)}／変更時刻からの実働${work}分（休憩除外）／チーム必要速度${team.toLocaleString()}個/時</p>`;
+      const total=pending.reduce((s,x)=>s+x.remaining,0),final=pending.length?Math.max(...pending.map(x=>x.deadline)):1020,start=Math.max(now,minutes(state.effectiveTime),570),work=Math.max(1,workingMinutes(start,final)),team=Math.ceil(total/(work/60)),person=Math.ceil(team/state.workers),per15=Math.ceil(person/4),suggested=Math.max(1,Math.ceil(team/state.onePersonRate)),gap=suggested-state.workers;
+      workerResult.innerHTML=`<strong>${state.effectiveTime}から${state.workers}名：1人あたり ${person.toLocaleString()}個/時・${per15.toLocaleString()}個/15分</strong><p>残り${total.toLocaleString()}個／最終締切${clock(final)}／実働${work}分（休憩除外）／チーム必要速度${team.toLocaleString()}個/時</p><p><b>自動提案：${suggested}名</b>（1人${state.onePersonRate.toLocaleString()}個/時基準）${gap>0?`・あと${gap}名必要`:gap<0?`・${Math.abs(gap)}名の余裕`:'・現在人数で対応可能'}</p>`;
+    }
+    function renderAlerts(rows,now){
+      const alerts=alertRows(rows,now);alertList.innerHTML=alerts.length?alerts.map(x=>`<div class="alert-row ${x.danger?'danger':'warn'}"><div><b>${escapeHtml(x.item.area)} ${x.item.cutoff}締切：${x.danger?'間に合わない可能性':'残り30分以内'}</b><small>残${x.remaining.toLocaleString()}個／実績速度 ${x.rate?x.rate.toLocaleString()+'個/時':'未計測'}／終了予測 ${forecastFor(x,now)}／必要人数 ${requiredWorkersFor(x,now)>=99?'算出不可':requiredWorkersFor(x,now)+'名'}</small></div></div>`).join(''):'<div class="alert-row ok"><div><b>現在、緊急アラートはありません</b><small>進捗を入力すると実績速度から先回り判定します。</small></div></div>';
+    }
+    function renderWorkerHistory(){
+      workerHistory.innerHTML=state.workerChanges.length?`<b>人数変更履歴</b>${[...state.workerChanges].reverse().slice(0,12).map(x=>`<div class="history-item"><span>${x.time}から <b>${x.workers}名</b></span><small>${new Date(x.savedAt).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}</small></div>`).join('')}`:'<div class="history-item"><span>人数変更履歴はまだありません</span></div>';
+    }
+    function renderQuickResult(id){
+      const item=state.waves.find(x=>x.id===id)||state.waves[0],row=groupedRows().find(x=>x.item.id===item.id),rate=actualRateFor(item.id),planRate=row?.rate||0,diff=rate-planRate;
+      quickResult.innerHTML=`<strong>${escapeHtml(item.area)}：実績 ${rate?rate.toLocaleString()+'個/時':'2回目の入力待ち'}</strong><p>計画必要速度 ${planRate.toLocaleString()}個/時${rate?`／計画差 ${diff>=0?'+':''}${diff.toLocaleString()}個/時／終了予測 ${forecastFor(row)}`:''}</p>`;
     }
     function renderCards(rows,now){
-      paceGrid.innerHTML=rows.filter(x=>x.item.planned>0).map(x=>{const done=x.remaining===0,late=!done&&now>=x.deadline,active=!done&&now>=x.start&&now<x.deadline,tone=done?'var(--green)':late?'var(--red)':active?'var(--amber)':'var(--blue)',bg=done?'#f0faf6':late?'#fff1f3':active?'#fff9ed':'#f7f9fd',status=done?'完了':late?'締切超過':active?'処理時間中':'待機',person=Math.ceil(x.rate/state.workers);return `<article class="pace-card" style="--tone:${tone};--card-bg:${bg}"><header><h3>${escapeHtml(x.item.area)}</h3><b class="status">${status}</b></header><p class="window">着手 ${clock(x.start)} → 締切 ${x.item.cutoff}（休憩除外の実働${x.work}分）</p><div class="pace-metrics"><div><small>処理する残数</small><strong>${x.remaining.toLocaleString()}個</strong></div><div><small>チーム必要速度</small><strong>${x.rate.toLocaleString()}個/時</strong></div><div><small>15分目標</small><strong>${x.per15.toLocaleString()}個</strong></div></div><p class="note"><b>${state.effectiveTime}から${state.workers}名：</b>1人あたり <b>${person.toLocaleString()}個/時</b>・<b>${Math.ceil(person/4).toLocaleString()}個/15分</b>${x.groupCount>1?`<br>${x.item.cutoff}締切の${x.groupCount}便合計で計算`:''}</p></article>`}).join('')||'<p>計画数を入力すると表示されます。</p>';
+      paceGrid.innerHTML=rows.filter(x=>x.item.planned>0).map(x=>{const done=x.remaining===0,late=!done&&now>=x.deadline,active=!done&&now>=x.start&&now<x.deadline,tone=done?'var(--green)':late?'var(--red)':active?'var(--amber)':'var(--blue)',bg=done?'#f0faf6':late?'#fff1f3':active?'#fff9ed':'#f7f9fd',status=done?'完了':late?'締切超過':active?'処理時間中':'待機',person=Math.ceil(x.rate/state.workers),needed=requiredWorkersFor(x,now);return `<article class="pace-card" style="--tone:${tone};--card-bg:${bg}"><header><h3>${escapeHtml(x.item.area)}</h3><b class="status">${status}</b></header><p class="window">着手 ${clock(x.start)} → 締切 ${x.item.cutoff}（休憩除外の実働${x.work}分）</p><div class="pace-metrics"><div><small>処理する残数</small><strong>${x.remaining.toLocaleString()}個</strong></div><div><small>チーム必要速度</small><strong>${x.rate.toLocaleString()}個/時</strong></div><div><small>15分目標</small><strong>${x.per15.toLocaleString()}個</strong></div></div><p class="note"><b>終了予測 ${forecastFor(x,now)}</b>／必要人数 ${needed>=99?'算出不可':needed+'名'}<br><b>${state.effectiveTime}から${state.workers}名：</b>1人あたり <b>${person.toLocaleString()}個/時</b>・<b>${Math.ceil(person/4).toLocaleString()}個/15分</b>${x.groupCount>1?`<br>${x.item.cutoff}締切の${x.groupCount}便合計で計算`:''}</p></article>`}).join('')||'<p>計画数を入力すると表示されます。</p>';
     }
     function renderTable(rows,now){
-      cutoffRows.innerHTML=state.waves.map(x=>{const row=rows.find(r=>r.item.id===x.id),remain=Math.max(0,x.planned-x.completed),done=x.planned>0&&remain===0,late=x.planned>0&&remain>0&&now>=minutes(x.cutoff);return `<tr class="${done?'row-done':late?'row-late':''}"><td><input data-field="area" data-id="${x.id}" value="${escapeHtml(x.area)}"></td><td><input data-field="cutoff" data-id="${x.id}" type="time" value="${x.cutoff}"></td><td><input data-field="planned" data-id="${x.id}" type="number" min="0" value="${x.planned}"></td><td><input data-field="completed" data-id="${x.id}" type="number" min="0" value="${x.completed}"></td><td>${remain.toLocaleString()}個</td><td>${done?'完了':late?'締切超過':x.planned?'進行中':'未入力'}</td></tr>`}).join('');
+      cutoffRows.innerHTML=state.waves.map(x=>{const row=rows.find(r=>r.item.id===x.id),remain=Math.max(0,x.planned-x.completed),done=x.planned>0&&remain===0,late=x.planned>0&&remain>0&&now>=minutes(x.cutoff),needed=row?requiredWorkersFor(row,now):0;return `<tr class="${done?'row-done':late?'row-late':''}"><td><input data-field="area" data-id="${x.id}" value="${escapeHtml(x.area)}"></td><td><input data-field="cutoff" data-id="${x.id}" type="time" value="${x.cutoff}"></td><td><input data-field="planned" data-id="${x.id}" type="number" min="0" value="${x.planned}"></td><td><input data-field="completed" data-id="${x.id}" type="number" min="0" value="${x.completed}"></td><td>${remain.toLocaleString()}個</td><td>${x.planned&&row?forecastFor(row,now):'-'}</td><td>${x.planned?(needed>=99?'至急':needed+'名'):'-'}</td><td><button class="primary" onclick="completeWave('${x.id}')" ${!x.planned||done?'disabled':''}>完了</button></td></tr>`}).join('');
     }
     function collect(){
       document.querySelectorAll('#cutoffRows input').forEach(input=>{const item=state.waves.find(x=>x.id===input.dataset.id);if(!item)return;const f=input.dataset.field;if(f==='planned'||f==='completed')item[f]=Math.max(0,Math.round(Number(input.value)||0));else item[f]=input.value||item[f]});
     }
-    function saveProgress(){
-      collect();const now=new Date().toISOString();state.waves.forEach(x=>{const done=x.planned>0&&x.completed>=x.planned;if(done&&!x.completedAt)x.completedAt=now;if(!done)x.completedAt=null});persist();render();saveMessage.textContent='進捗と完了時刻を保存し、必要速度を再計算しました。';
+    const authHeaders=()=>({...SB_HEADERS,Authorization:'Bearer '+authSession.access_token});
+    function setSync(text,status=''){syncStatus.textContent=text;syncStatus.className='sync '+status}
+    async function saveCloudState(changeType='shipping_update'){
+      if(!authSession||cloudBusy)return false;cloudBusy=true;setSync('共有中');
+      try{
+        const read=await fetch(SB_URL+'/rest/v1/logistics_state?id=eq.main&select=data,updated_at',{headers:authHeaders(),cache:'no-store'});if(!read.ok)throw new Error('read');
+        const row=(await read.json())[0]||{},remote=row.data||{},ops={...(remote.opsSettings||{}),shippingStandaloneV2:state},input={...remote,opsSettings:ops,changeType,shippingStandaloneUpdatedAt:new Date().toISOString()};
+        const write=await fetch(SB_URL+'/rest/v1/rpc/update_logistics_state',{method:'POST',headers:authHeaders(),body:JSON.stringify({input_data:input})});if(!write.ok)throw new Error('write');
+        cloudUpdatedAt=(await write.json())?.updated_at||'';setSync('共有済み','ok');return true
+      }catch(e){setSync('端末保存','error');return false}finally{cloudBusy=false}
     }
-    function applyWorkers(){state.workers=Math.min(2,Math.max(1,Number(workerCount.value)||1));state.effectiveTime=workerTime.value||'09:30';persist();render();workerMessage.textContent=`${state.effectiveTime}から${state.workers}名として再計算しました。`}
+    async function loadCloudState(){
+      if(!authSession||cloudBusy)return;cloudBusy=true;setSync('読込中');
+      try{const r=await fetch(SB_URL+'/rest/v1/logistics_state?id=eq.main&select=data,updated_at',{headers:authHeaders(),cache:'no-store'});if(!r.ok)throw new Error('load');const row=(await r.json())[0],remote=row?.data?.opsSettings?.shippingStandaloneV2;if(remote&&remote.date){state={...state,...remote};persist();render()}cloudUpdatedAt=row?.updated_at||'';setSync('共有済み','ok')}catch(e){setSync('端末保存','error')}finally{cloudBusy=false}
+    }
+    async function saveState(changeType){persist();render();await saveCloudState(changeType)}
+    async function saveProgress(){
+      collect();const now=new Date().toISOString();state.waves.forEach(x=>{const done=x.planned>0&&x.completed>=x.planned;if(done&&!x.completedAt)x.completedAt=now;if(!done)x.completedAt=null});await saveState('shipping_progress');saveMessage.textContent='進捗と完了時刻を保存し、必要速度を再計算しました。';
+    }
+    async function completeWave(id){collect();const item=state.waves.find(x=>x.id===id);if(!item||!item.planned)return;item.completed=item.planned;item.completedAt=new Date().toISOString();state.progressSnapshots.push({id:crypto.randomUUID?.()||String(Date.now()),waveId:id,completed:item.completed,interval:0,at:item.completedAt});await saveState('shipping_complete');saveMessage.textContent=`${item.area}を完了し、次便を再計算しました。`}
+    async function saveQuickProgress(){const id=quickWave.value,item=state.waves.find(x=>x.id===id),completed=Math.max(0,Math.round(Number(quickCompleted.value)||0));if(!item)return;item.completed=Math.min(Math.max(completed,0),Math.max(item.planned,completed));const at=new Date().toISOString();state.progressSnapshots.push({id:crypto.randomUUID?.()||String(Date.now()),waveId:id,completed:item.completed,interval:Number(quickInterval.value)||5,at});if(item.planned>0&&item.completed>=item.planned&&!item.completedAt)item.completedAt=at;if(item.completed<item.planned)item.completedAt=null;state.progressSnapshots=state.progressSnapshots.slice(-500);await saveState('shipping_interval_progress');quickResult.scrollIntoView({behavior:'smooth',block:'center'})}
+    async function applyWorkers(){state.workers=Math.min(2,Math.max(1,Number(workerCount.value)||1));state.effectiveTime=workerTime.value||'09:30';state.onePersonRate=Math.max(1,Number(onePersonRate.value)||100);state.workerChanges.push({time:state.effectiveTime,workers:state.workers,onePersonRate:state.onePersonRate,savedAt:new Date().toISOString()});state.workerChanges=state.workerChanges.slice(-100);await saveState('shipping_worker_change');workerMessage.textContent=`${state.effectiveTime}から${state.workers}名として再計算・保存しました。`}
     function setNow(){workerTime.value=clock(nowMinutes());workerMessage.textContent='現在時刻を入力しました。人数を選び「この時刻から反映」を押してください。'}
-    function resetToday(){if(!confirm('本日の出荷済み数と完了時刻をリセットしますか？'))return;state.waves.forEach(x=>{x.completed=0;x.completedAt=null});persist();render();saveMessage.textContent='本日の実績をリセットしました。'}
+    async function resetToday(){if(!confirm('本日の出荷済み数と完了時刻をリセットしますか？'))return;state.waves.forEach(x=>{x.completed=0;x.completedAt=null});state.progressSnapshots=[];await saveState('shipping_reset');saveMessage.textContent='本日の実績をリセットしました。'}
+    async function copyPreviousPlan(){const previous=state.planHistory[0];if(!previous){saveMessage.textContent='複製できる過去計画がありません。';return}state.waves=state.waves.map(x=>{const p=previous.waves.find(y=>y.id===x.id)||{};return{...x,area:p.area||x.area,cutoff:p.cutoff||x.cutoff,planned:Number(p.planned)||0,completed:0,completedAt:null}});state.progressSnapshots=[];await saveState('shipping_copy_previous');saveMessage.textContent=`${previous.date}の計画を本日へ複製しました。`}
+    function reportText(){const rows=groupedRows(),completed=state.waves.filter(x=>x.planned>0&&x.completed>=x.planned),late=state.waves.filter(x=>x.completedAt&&minutes(new Date(x.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',hour12:false}))>minutes(x.cutoff)),rates=state.waves.map(x=>actualRateFor(x.id)).filter(Boolean),avg=rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length):0;return `出荷締切ペース 日報\n日付：${state.date}\n\n【全体】\n計画 ${state.waves.reduce((s,x)=>s+x.planned,0).toLocaleString()}個\n出荷済み ${state.waves.reduce((s,x)=>s+x.completed,0).toLocaleString()}個\n完了 ${completed.length}/${state.waves.length}便\n遅延 ${late.length}便\n平均実績速度 ${avg.toLocaleString()}個/時\n\n【方面別】\n${rows.filter(x=>x.item.planned>0).map(x=>`・${x.item.area} ${x.item.cutoff}締切：${x.item.completed.toLocaleString()}/${x.item.planned.toLocaleString()}個、終了 ${forecastFor(x)}`).join('\n')}\n\n【人数変更】\n${state.workerChanges.length?state.workerChanges.map(x=>`・${x.time}から${x.workers}名`).join('\n'):'変更なし'}`;}
+    function renderReports(){dailyReport.value=reportText();reportHistory.innerHTML=state.reports.slice(0,5).map(x=>`<div class="history-item"><span>${x.date}の日報</span><small>${new Date(x.savedAt).toLocaleString('ja-JP')}</small></div>`).join('')}
+    async function saveDailyReport(){const text=reportText(),entry={date:state.date,text,savedAt:new Date().toISOString()};state.reports=[entry,...state.reports.filter(x=>x.date!==state.date)].slice(0,60);await saveState('shipping_daily_report');dailyReport.value=text}
+    function downloadReport(){const blob=new Blob([reportText()],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`出荷日報_${state.date}.txt`;a.click();URL.revokeObjectURL(a.href)}
+    async function enableNotifications(){if('Notification'in window&&Notification.permission!=='granted')await Notification.requestPermission();try{const ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);g.gain.value=.04;o.start();o.stop(ctx.currentTime+.12)}catch{}}
+    function openLogin(){if(authSession){loadCloudState();return}authScreen.classList.add('open')}
+    function closeLogin(){authScreen.classList.remove('open')}
+    async function sendLoginLink(){const email=loginEmail.value.trim().toLowerCase();if(!email){authMessage.textContent='メールアドレスを入力してください。';return}authMessage.textContent='送信中…';try{const redirect=location.origin+location.pathname,r=await fetch(SB_URL+'/auth/v1/otp?redirect_to='+encodeURIComponent(redirect),{method:'POST',headers:{apikey:SB_KEY,'Content-Type':'application/json'},body:JSON.stringify({email,create_user:true,data:{display_name:email.split('@')[0]}})});if(!r.ok)throw new Error();authMessage.textContent='認証メールを送信しました。メール内のリンクを開いてください。'}catch{authMessage.textContent='送信できませんでした。少し待って再度お試しください。'}}
+    async function bootstrapCloud(){const hash=new URLSearchParams(location.hash.replace(/^#/,''));if(hash.get('access_token')){authSession={access_token:hash.get('access_token'),refresh_token:hash.get('refresh_token'),expires_at:Math.floor(Date.now()/1000)+Number(hash.get('expires_in')||3600)};localStorage.setItem('shipping_auth',JSON.stringify(authSession));history.replaceState(null,'',location.pathname+location.search)}else try{authSession=JSON.parse(localStorage.getItem('shipping_auth')||'null')}catch{}if(authSession){closeLogin();await loadCloudState()}else setSync('端末保存')}
     function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-    setNow();render();
+    quickWave.addEventListener('change',()=>{const item=state.waves.find(x=>x.id===quickWave.value);quickCompleted.value=item?.completed||0;renderQuickResult(quickWave.value)});
+    setNow();render();bootstrapCloud();
+    setInterval(()=>{const rows=groupedRows(),alerts=alertRows(rows);if(alerts.some(x=>x.danger)&&'Notification'in window&&Notification.permission==='granted')new Notification('出荷締切アラート',{body:`${alerts[0].item.area}が締切リスクです。残${alerts[0].remaining.toLocaleString()}個`});renderAlerts(rows,nowMinutes())},60000);
+    setInterval(()=>{if(authSession)loadCloudState()},15000);
     if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
   </script>
 </body>
