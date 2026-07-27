@@ -4,12 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f4f7fb">
-  <title>出荷締切ペース</title>
+  <title>SHIP PACE｜方面別 出荷締切ナビ</title>
+  <link rel="icon" type="image/png" href="./ship-pace-icon.png">
+  <link rel="apple-touch-icon" href="./ship-pace-icon.png">
   <style>
     :root{--ink:#14213d;--muted:#64708a;--line:#dfe5ef;--blue:#315eea;--green:#13805c;--amber:#c57a18;--red:#c94f62;--bg:#f3f6fb}
     *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}
     button,input,select{font:inherit}.shell{max-width:1180px;margin:auto;padding:20px 18px 70px}
-    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}.brand{display:flex;gap:12px;align-items:center}.mark{width:42px;height:42px;border-radius:13px;background:var(--blue);display:grid;place-items:center;color:#fff;font-weight:900}.brand b{display:block;letter-spacing:.08em}.brand small{color:var(--muted)}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}.brand{display:flex;gap:12px;align-items:center}.mark{width:46px;height:46px;border-radius:14px;overflow:hidden;box-shadow:0 6px 16px rgba(49,94,234,.22)}.mark img{display:block;width:100%;height:100%;object-fit:cover}.brand b{display:block;letter-spacing:.09em}.brand small{color:var(--muted)}
     .live{display:flex;gap:7px;align-items:center;color:var(--green);font-weight:800}.live i{width:8px;height:8px;border-radius:50%;background:var(--green)}
     .hero,.panel{background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:0 12px 35px rgba(25,43,80,.05)}.hero{padding:28px;margin-bottom:18px}.eyebrow{font-size:12px;letter-spacing:.18em;color:#7885a1;font-weight:900}.hero h1{font-size:clamp(28px,5vw,48px);margin:9px 0 8px}.hero p{color:var(--muted);margin:0}
     .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:24px}.metric{background:#f7f9fd;border-radius:17px;padding:17px}.metric small{color:var(--muted);display:block}.metric strong{display:block;font-size:27px;margin-top:8px}
@@ -38,7 +40,7 @@
 </head>
 <body>
   <main class="shell">
-    <header><div class="brand"><div class="mark">出</div><div><b>出荷締切ペース</b><small>方面別オペレーション</small></div></div><div class="ops-status"><button id="syncStatus" class="sync" onclick="openLogin()">端末保存</button><span id="lastSyncText" class="last-sync">未共有</span><button id="testModeButton" class="secondary" onclick="toggleTestMode()">テストモード</button></div><div class="live"><i></i>LIVE</div></header>
+    <header><div class="brand"><div class="mark"><img src="./ship-pace-icon.png" alt=""></div><div><b>SHIP PACE</b><small>方面別 出荷締切ナビ</small></div></div><div class="ops-status"><button id="syncStatus" class="sync" onclick="openLogin()">端末保存</button><span id="lastSyncText" class="last-sync">未共有</span><button id="testModeButton" class="secondary" onclick="toggleTestMode()">テストモード</button></div><div class="live"><i></i>LIVE</div></header>
     <div id="testModeBar" class="mode-bar" hidden><div><b>テストモード実行中</b><small>入力内容は本番・クラウドへ反映されません。</small></div><button class="secondary" onclick="toggleTestMode()">本番へ戻る</button></div>
     <div id="conflictBox" class="conflict" hidden><b>ほかの端末で新しい更新があります。</b><div>この端末からの保存を停止しました。最新データを読み込んでから入力し直してください。</div><button class="secondary" onclick="resolveConflict()" style="margin-top:9px">最新データを読み込む</button></div>
     <section class="hero">
@@ -401,7 +403,7 @@
     function setNow(){workerTime.value=clock(nowMinutes());workerMessage.textContent='現在時刻を入力しました。「変更後の人数」を選び、「人数変更を反映」を押してください。'}
     async function resetToday(){if(!confirm('本日の出荷済み数と完了時刻をリセットしますか？'))return;state.waves.forEach(x=>{x.completed=0;x.completedAt=null});state.progressSnapshots=[];await saveState('shipping_reset');saveMessage.textContent='本日の実績をリセットしました。'}
     async function copyPreviousPlan(){const previous=state.planHistory[0];if(!previous){saveMessage.textContent='複製できる過去計画がありません。';return}state.waves=state.waves.map(x=>{const p=previous.waves.find(y=>y.id===x.id)||{};return{...x,area:p.area||x.area,cutoff:p.cutoff||x.cutoff,planned:Number(p.planned)||0,completed:0,completedAt:null}});state.progressSnapshots=[];await saveState('shipping_copy_previous');saveMessage.textContent=`${previous.date}の計画を本日へ複製しました。`}
-    function reportText(){const rows=groupedRows(),completed=state.waves.filter(x=>x.planned>0&&x.completed>=x.planned),late=state.waves.filter(x=>x.completedAt&&minutes(new Date(x.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',hour12:false}))>minutes(x.cutoff)),rates=state.waves.map(x=>actualRateFor(x.id)).filter(Boolean),avg=rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length):0;return `出荷締切ペース 日報\n日付：${state.date}\n開始時刻：${state.operationStart||'09:30'}\n\n【全体】\n計画 ${state.waves.reduce((s,x)=>s+x.planned,0).toLocaleString()}個\n出荷済み ${state.waves.reduce((s,x)=>s+x.completed,0).toLocaleString()}個\n完了 ${completed.length}/${state.waves.length}便\n遅延 ${late.length}便\n平均実績速度 ${avg.toLocaleString()}個/時\n\n【方面別】\n${rows.filter(x=>x.item.planned>0).map(x=>`・${x.item.area} ${x.item.cutoff}締切：${x.item.completed.toLocaleString()}/${x.item.planned.toLocaleString()}個、終了 ${forecastFor(x)}`).join('\n')}\n\n【人数変更】\n${state.workerChanges.length?state.workerChanges.map(x=>`・${x.time}から${x.workers}名`).join('\n'):'変更なし'}`;}
+    function reportText(){const rows=groupedRows(),completed=state.waves.filter(x=>x.planned>0&&x.completed>=x.planned),late=state.waves.filter(x=>x.completedAt&&minutes(new Date(x.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',hour12:false}))>minutes(x.cutoff)),rates=state.waves.map(x=>actualRateFor(x.id)).filter(Boolean),avg=rates.length?Math.round(rates.reduce((a,b)=>a+b,0)/rates.length):0;return `SHIP PACE 日報\n日付：${state.date}\n開始時刻：${state.operationStart||'09:30'}\n\n【全体】\n計画 ${state.waves.reduce((s,x)=>s+x.planned,0).toLocaleString()}個\n出荷済み ${state.waves.reduce((s,x)=>s+x.completed,0).toLocaleString()}個\n完了 ${completed.length}/${state.waves.length}便\n遅延 ${late.length}便\n平均実績速度 ${avg.toLocaleString()}個/時\n\n【方面別】\n${rows.filter(x=>x.item.planned>0).map(x=>`・${x.item.area} ${x.item.cutoff}締切：${x.item.completed.toLocaleString()}/${x.item.planned.toLocaleString()}個、終了 ${forecastFor(x)}`).join('\n')}\n\n【人数変更】\n${state.workerChanges.length?state.workerChanges.map(x=>`・${x.time}から${x.workers}名`).join('\n'):'変更なし'}`;}
     function renderReports(){dailyReport.value=reportText();reportHistory.innerHTML=state.reports.slice(0,5).map(x=>`<div class="history-item"><span>${x.date}の日報</span><small>${new Date(x.savedAt).toLocaleString('ja-JP')}</small></div>`).join('')}
     function renderAuditHistory(){
       undoButton.disabled=!state.undoStack.length;
