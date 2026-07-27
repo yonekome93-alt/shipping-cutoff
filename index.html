@@ -91,13 +91,15 @@
       <div id="reportHistory" class="history-list"></div>
     </section>
   </main>
-  <div id="authScreen" class="auth"><section class="auth-card"><div class="eyebrow">CLOUD SHARING</div><h2>クラウド共有</h2><p>LOGI FLOWと同じ登録メールで認証すると、スマホとパソコンで同じ進捗を共有できます。</p><input id="loginEmail" type="email" placeholder="メールアドレス"><button class="primary" onclick="sendLoginLink()">認証メールを送る</button><button class="secondary" onclick="closeLogin()">端末保存のまま使う</button><p id="authMessage" class="auth-message"></p></section></div>
+  <div id="authScreen" class="auth"><section class="auth-card"><div class="eyebrow">CLOUD SHARING</div><h2>共通PIN</h2><p>全員共通の4桁PINを入力すると、スマホとパソコンで同じ進捗を共有できます。</p><input id="sharedPin" type="password" inputmode="numeric" maxlength="4" autocomplete="one-time-code" placeholder="4桁PIN"><button class="primary" onclick="unlockSharedPin()">共通PINで開始</button><button class="secondary" onclick="closeLogin()">端末保存のまま使う</button><p id="authMessage" class="auth-message"></p></section></div>
   <script>
     const STORAGE='shipping-cutoff-standalone-v1';
     const SB_URL='https://ygbxyejhfeieqhgdymys.supabase.co';
     const SB_KEY='sb_publishable_kQvjwG8nKu1YGM_3qlZ-Vg_ok3jlvIW';
     const SB_HEADERS={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
-    let authSession=null,currentProfile=null,cloudBusy=false,cloudUpdatedAt='';
+    const WORKSPACE_ID='4dad83ad-0fb0-451f-b375-49595c06e538';
+    const PIN_SESSION='shipping-cutoff-shared-pin';
+    let sharedPinValue='',cloudBusy=false,cloudUpdatedAt='';
     const defaults=[
       {id:'kyushu-am',area:'九州①',cutoff:'10:00'},{id:'okinawa',area:'沖縄',cutoff:'11:00'},
       {id:'shikoku',area:'四国',cutoff:'12:00'},{id:'chugoku',area:'中国',cutoff:'12:00'},
@@ -184,20 +186,20 @@
     function collect(){
       document.querySelectorAll('#cutoffRows input').forEach(input=>{const item=state.waves.find(x=>x.id===input.dataset.id);if(!item)return;const f=input.dataset.field;if(f==='planned'||f==='completed')item[f]=Math.max(0,Math.round(Number(input.value)||0));else item[f]=input.value||item[f]});
     }
-    const authHeaders=()=>({...SB_HEADERS,Authorization:'Bearer '+authSession.access_token});
     function setSync(text,status=''){syncStatus.textContent=text;syncStatus.className='sync '+status}
     async function saveCloudState(changeType='shipping_update'){
-      if(!authSession||cloudBusy)return false;cloudBusy=true;setSync('共有中');
+      if(!sharedPinValue||cloudBusy)return false;cloudBusy=true;setSync('共有中');
       try{
-        const read=await fetch(SB_URL+'/rest/v1/logistics_state?id=eq.main&select=data,updated_at',{headers:authHeaders(),cache:'no-store'});if(!read.ok)throw new Error('read');
-        const row=(await read.json())[0]||{},remote=row.data||{},ops={...(remote.opsSettings||{}),shippingStandaloneV2:state},input={...remote,opsSettings:ops,changeType,shippingStandaloneUpdatedAt:new Date().toISOString()};
-        const write=await fetch(SB_URL+'/rest/v1/rpc/update_logistics_state',{method:'POST',headers:authHeaders(),body:JSON.stringify({input_data:input})});if(!write.ok)throw new Error('write');
-        cloudUpdatedAt=(await write.json())?.updated_at||'';setSync('共有済み','ok');return true
-      }catch(e){setSync('端末保存','error');return false}finally{cloudBusy=false}
+        const r=await fetch(SB_URL+'/rest/v1/rpc/save_shipping_cutoff_state',{method:'POST',headers:SB_HEADERS,body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:sharedPinValue,input_data:{...state,changeType,cloudUpdatedAt:new Date().toISOString()}})});
+        if(!r.ok)throw new Error('save');const result=await r.json();cloudUpdatedAt=result?.updated_at||'';setSync('共有済み','ok');return true
+      }catch(e){setSync('共有エラー','error');return false}finally{cloudBusy=false}
     }
-    async function loadCloudState(){
-      if(!authSession||cloudBusy)return;cloudBusy=true;setSync('読込中');
-      try{const r=await fetch(SB_URL+'/rest/v1/logistics_state?id=eq.main&select=data,updated_at',{headers:authHeaders(),cache:'no-store'});if(!r.ok)throw new Error('load');const row=(await r.json())[0],remote=row?.data?.opsSettings?.shippingStandaloneV2;if(remote&&remote.date){state={...state,...remote};persist();render()}cloudUpdatedAt=row?.updated_at||'';setSync('共有済み','ok')}catch(e){setSync('端末保存','error')}finally{cloudBusy=false}
+    async function loadCloudState(pin=sharedPinValue){
+      if(!pin||cloudBusy)return false;cloudBusy=true;setSync('読込中');
+      try{
+        const r=await fetch(SB_URL+'/rest/v1/rpc/load_shipping_cutoff_state',{method:'POST',headers:SB_HEADERS,cache:'no-store',body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:pin})});
+        if(!r.ok)throw new Error('invalid');const remote=await r.json();sharedPinValue=pin;sessionStorage.setItem(PIN_SESSION,pin);if(remote&&remote.date){state={...state,...remote};persist();render()}cloudUpdatedAt=remote?.cloudUpdatedAt||'';setSync('共有済み','ok');return true
+      }catch(e){setSync('PIN未認証','error');return false}finally{cloudBusy=false}
     }
     async function saveState(changeType){persist();render();await saveCloudState(changeType)}
     async function saveProgress(){
@@ -214,15 +216,16 @@
     async function saveDailyReport(){const text=reportText(),entry={date:state.date,text,savedAt:new Date().toISOString()};state.reports=[entry,...state.reports.filter(x=>x.date!==state.date)].slice(0,60);await saveState('shipping_daily_report');dailyReport.value=text}
     function downloadReport(){const blob=new Blob([reportText()],{type:'text/plain;charset=utf-8'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`出荷日報_${state.date}.txt`;a.click();URL.revokeObjectURL(a.href)}
     async function enableNotifications(){if('Notification'in window&&Notification.permission!=='granted')await Notification.requestPermission();try{const ctx=new(window.AudioContext||window.webkitAudioContext)(),o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);g.gain.value=.04;o.start();o.stop(ctx.currentTime+.12)}catch{}}
-    function openLogin(){if(authSession){loadCloudState();return}authScreen.classList.add('open')}
+    function openLogin(){if(sharedPinValue){loadCloudState();return}authScreen.classList.add('open');setTimeout(()=>sharedPin.focus(),50)}
     function closeLogin(){authScreen.classList.remove('open')}
-    async function sendLoginLink(){const email=loginEmail.value.trim().toLowerCase();if(!email){authMessage.textContent='メールアドレスを入力してください。';return}authMessage.textContent='送信中…';try{const redirect=location.origin+location.pathname,r=await fetch(SB_URL+'/auth/v1/otp?redirect_to='+encodeURIComponent(redirect),{method:'POST',headers:{apikey:SB_KEY,'Content-Type':'application/json'},body:JSON.stringify({email,create_user:true,data:{display_name:email.split('@')[0]}})});if(!r.ok)throw new Error();authMessage.textContent='認証メールを送信しました。メール内のリンクを開いてください。'}catch{authMessage.textContent='送信できませんでした。少し待って再度お試しください。'}}
-    async function bootstrapCloud(){const hash=new URLSearchParams(location.hash.replace(/^#/,''));if(hash.get('access_token')){authSession={access_token:hash.get('access_token'),refresh_token:hash.get('refresh_token'),expires_at:Math.floor(Date.now()/1000)+Number(hash.get('expires_in')||3600)};localStorage.setItem('shipping_auth',JSON.stringify(authSession));history.replaceState(null,'',location.pathname+location.search)}else try{authSession=JSON.parse(localStorage.getItem('shipping_auth')||'null')}catch{}if(authSession){closeLogin();await loadCloudState()}else setSync('端末保存')}
+    async function unlockSharedPin(){const pin=sharedPin.value.trim();if(!/^\d{4}$/.test(pin)){authMessage.textContent='4桁の数字を入力してください。';return}authMessage.textContent='確認中…';if(await loadCloudState(pin)){authMessage.textContent='共有を開始しました。';closeLogin()}else authMessage.textContent='PINが違うか、クラウドの初回設定が未完了です。'}
+    async function bootstrapCloud(){sharedPinValue=sessionStorage.getItem(PIN_SESSION)||'';if(sharedPinValue){if(await loadCloudState())closeLogin()}else setSync('PIN未認証')}
     function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
     quickWave.addEventListener('change',()=>{const item=state.waves.find(x=>x.id===quickWave.value);quickCompleted.value=item?.completed||0;renderQuickResult(quickWave.value)});
     setNow();render();bootstrapCloud();
     setInterval(()=>{const rows=groupedRows(),alerts=alertRows(rows);if(alerts.some(x=>x.danger)&&'Notification'in window&&Notification.permission==='granted')new Notification('出荷締切アラート',{body:`${alerts[0].item.area}が締切リスクです。残${alerts[0].remaining.toLocaleString()}個`});renderAlerts(rows,nowMinutes())},60000);
-    setInterval(()=>{if(authSession)loadCloudState()},15000);
+    sharedPin.addEventListener('keydown',event=>{if(event.key==='Enter')unlockSharedPin()});
+    setInterval(()=>{if(sharedPinValue)loadCloudState()},15000);
     if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
   </script>
 </body>
