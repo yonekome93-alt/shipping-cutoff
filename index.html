@@ -196,7 +196,7 @@
     const snapshotState=value=>{const copy=JSON.parse(JSON.stringify(value));delete copy.auditLog;delete copy.undoStack;delete copy.syncRevision;delete copy.syncDevice;delete copy.changeType;delete copy.cloudUpdatedAt;return copy};
     const changeLabels={shipping_progress:'進捗保存',shipping_complete:'便を完了',shipping_interval_progress:'時間別進捗',shipping_start_change:'開始時刻変更',shipping_worker_change:'人数変更',shipping_break_change:'休憩時間変更',shipping_reset:'実績リセット',shipping_copy_previous:'前日計画複製',shipping_tomorrow_plan:'翌日計画保存',shipping_daily_report:'日報保存',shipping_undo:'操作取消'};
     function groupedRows(){
-      const groups=[];for(const item of state.waves){let g=groups.find(x=>x.cutoff===item.cutoff);if(!g){g={cutoff:item.cutoff,deadline:minutes(item.cutoff),items:[]};groups.push(g)}g.items.push(item)}
+      const groups=[];for(const item of state.waves.filter(x=>x.planned>0)){let g=groups.find(x=>x.cutoff===item.cutoff);if(!g){g={cutoff:item.cutoff,deadline:minutes(item.cutoff),items:[]};groups.push(g)}g.items.push(item)}
       groups.sort((a,b)=>a.deadline-b.deadline);let cursor=minutes(state.operationStart||'09:30');
       return groups.flatMap(g=>{
         const groupPlanned=g.items.reduce((s,x)=>s+x.planned,0),groupCompleted=g.items.reduce((s,x)=>s+Math.min(x.completed,x.planned),0),remaining=Math.max(0,groupPlanned-groupCompleted);
@@ -281,6 +281,7 @@
     }
     function renderQuickResult(id){
       const item=state.waves.find(x=>x.id===id)||state.waves[0],row=groupedRows().find(x=>x.item.id===item.id),list=snapshotsFor(item.id),latest=list.at(-1),previous=list.at(-2),rate=actualRateFor(item.id),planRate=row?.rate||0,diff=rate-planRate;
+      if(!latest){quickResult.innerHTML=`<strong>${escapeHtml(item.area)}：まだ進捗は入力されていません</strong><p>累計出荷済み数を入力して「進捗を保存」を押すと、次回の入力から実績速度と計画差を自動計算します。</p>`;return}
       if(!previous){quickResult.innerHTML=`<strong>${escapeHtml(item.area)}：初回の進捗を保存しました</strong><p>次回の保存時刻と累計数から、経過時間と実績速度を自動計算します。</p>`;return}
       const elapsed=Math.max(1,Math.round((new Date(latest.at)-new Date(previous.at))/60000)),increase=Math.max(0,Number(latest.completed)-Number(previous.completed));
       quickResult.innerHTML=`<strong>${escapeHtml(item.area)}：前回から${elapsed}分・${increase.toLocaleString()}個増加</strong><p>実績速度 ${rate.toLocaleString()}個/時／計画必要速度 ${planRate.toLocaleString()}個/時／計画差 ${diff>=0?'+':''}${diff.toLocaleString()}個/時／終了予測 ${forecastFor(row)}</p>`;
@@ -438,7 +439,7 @@
     async function bootstrapCloud(){if(isTestMode){setSync('テスト中');lastSyncText.textContent='クラウドへ保存しません';return}sharedPinValue=localStorage.getItem(PIN_SESSION)||'';if(sharedPinValue){if(await loadCloudState())closeLogin()}else setSync('PIN未認証')}
     function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
     quickWave.addEventListener('change',()=>{const item=state.waves.find(x=>x.id===quickWave.value);quickCompleted.value=item?.completed||0;renderQuickResult(quickWave.value)});
-    setNow();render();bootstrapCloud();
+    render();bootstrapCloud();
     setInterval(()=>{const rows=groupedRows();notifyAlerts();announceAlerts();renderAlerts(rows,nowMinutes())},60000);
     sharedPin.addEventListener('keydown',event=>{if(event.key==='Enter')unlockSharedPin()});
     setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState()},15000);
