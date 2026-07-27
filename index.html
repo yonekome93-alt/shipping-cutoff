@@ -129,7 +129,7 @@
       <div id="paceGrid" class="pace-grid"></div>
     </section>
     <section class="panel future-panel">
-      <div class="section-head"><div><div class="eyebrow">NEXT DAY PLAN</div><h2>翌日分の出荷計画</h2><p>当日中に翌日の方面別計画数と開始時刻を準備できます。当日実績とは別に保存・共有されます。</p></div><div class="controls"><label>計画日<input id="tomorrowPlanDate" class="future-date" type="date" onchange="renderTomorrowPlan()"></label><label>翌日開始時刻<input id="tomorrowOperationStart" type="time" value="09:30"></label><button class="primary" onclick="saveTomorrowPlan()">翌日計画を保存</button></div></div>
+      <div class="section-head"><div><div class="eyebrow">NEXT DAY PLAN</div><h2>翌日分の出荷計画</h2><p>当日中に翌日の方面別計画数と開始時刻を準備できます。当日実績とは別に保存・共有されます。</p></div><div class="controls"><label>計画日<input id="tomorrowPlanDate" class="future-date" type="date" onchange="changeTomorrowPlanDate()"></label><label>翌日開始時刻<input id="tomorrowOperationStart" type="time" value="09:30"></label><button class="primary" onclick="saveTomorrowPlan()">翌日計画を保存</button></div></div>
       <div class="table-wrap"><table><thead><tr><th>方面／便</th><th>締切</th><th>翌日計画数</th></tr></thead><tbody id="tomorrowRows"></tbody></table></div>
       <div id="tomorrowMessage" class="message"></div>
     </section>
@@ -162,6 +162,7 @@
     const WORKSPACE_ID='4dad83ad-0fb0-451f-b375-49595c06e538';
     const PIN_SESSION='shipping-cutoff-shared-pin';
     let sharedPinValue='',cloudBusy=false,cloudUpdatedAt='',lastCloudRevision='',saveConflict=false;
+    let tomorrowDraft=null;
     let isTestMode=localStorage.getItem(TEST_MODE_KEY)==='1';
     let voiceEnabled=localStorage.getItem(VOICE_KEY)==='1';
     let spokenAlerts=new Set(),notifiedAlerts=new Set();
@@ -297,14 +298,23 @@
     }
     function renderTomorrowPlan(){
       const target=tomorrowPlanDate.value||offsetDateKey(1),entry=state.futurePlans?.[target],saved=Array.isArray(entry)?entry:(Array.isArray(entry?.waves)?entry.waves:[]);
-      tomorrowOperationStart.value=entry?.operationStart||state.operationStart||'09:30';
-      tomorrowRows.innerHTML=defaults.map(x=>{const current=state.waves.find(y=>y.id===x.id)||x,plan=saved.find(y=>y.id===x.id)||{};return `<tr><td><input data-future-field="area" data-id="${x.id}" value="${escapeHtml(plan.area||current.area||x.area)}"></td><td><input data-future-field="cutoff" data-id="${x.id}" type="time" value="${plan.cutoff||current.cutoff||x.cutoff}"></td><td><input data-future-field="planned" data-id="${x.id}" type="number" min="0" value="${Number(plan.planned)||0}"></td></tr>`}).join('');
+      const draft=tomorrowDraft?.date===target?tomorrowDraft:null,displayRows=draft?.waves||saved;
+      tomorrowOperationStart.value=draft?.operationStart||entry?.operationStart||state.operationStart||'09:30';
+      tomorrowRows.innerHTML=defaults.map(x=>{const current=state.waves.find(y=>y.id===x.id)||x,plan=displayRows.find(y=>y.id===x.id)||{};return `<tr><td><input data-future-field="area" data-id="${x.id}" value="${escapeHtml(plan.area||current.area||x.area)}"></td><td><input data-future-field="cutoff" data-id="${x.id}" type="time" value="${plan.cutoff||current.cutoff||x.cutoff}"></td><td><input data-future-field="planned" data-id="${x.id}" type="number" min="0" value="${Number(plan.planned)||0}"></td></tr>`}).join('');
       tomorrowMessage.textContent=saved.length?`${target}の計画を保存済みです。日付が変わると本日の計画へ自動反映されます。`:'';
     }
+    function captureTomorrowDraft(){
+      const target=tomorrowPlanDate.value||offsetDateKey(1);
+      const waves=defaults.map(x=>{const inputs=[...document.querySelectorAll(`#tomorrowRows [data-id="${x.id}"]`)],get=field=>inputs.find(i=>i.dataset.futureField===field)?.value;return{id:x.id,area:get('area')||x.area,cutoff:get('cutoff')||x.cutoff,planned:Math.max(0,Math.round(Number(get('planned'))||0))}});
+      tomorrowDraft={date:target,operationStart:tomorrowOperationStart.value||'09:30',waves};
+      tomorrowMessage.textContent='入力中の内容を一時保存しています。「翌日計画を保存」を押すと共有されます。';
+      return tomorrowDraft;
+    }
+    function changeTomorrowPlanDate(){tomorrowDraft=null;renderTomorrowPlan()}
     async function saveTomorrowPlan(){
       const target=tomorrowPlanDate.value;if(!target||target<=dateKey()){tomorrowMessage.textContent='翌日以降の日付を選択してください。';return}
-      const rows=defaults.map(x=>{const inputs=[...document.querySelectorAll(`#tomorrowRows [data-id="${x.id}"]`)],get=field=>inputs.find(i=>i.dataset.futureField===field)?.value;return{id:x.id,area:get('area')||x.area,cutoff:get('cutoff')||x.cutoff,planned:Math.max(0,Math.round(Number(get('planned'))||0))}});
-      state.futurePlans={...(state.futurePlans||{}),[target]:{operationStart:tomorrowOperationStart.value||'09:30',waves:rows}};await saveState('shipping_tomorrow_plan');tomorrowMessage.textContent=`${target}の翌日計画（開始 ${tomorrowOperationStart.value||'09:30'}）を保存・共有しました。`;
+      const draft=captureTomorrowDraft(),operationStart=draft.operationStart,rows=draft.waves;
+      state.futurePlans={...(state.futurePlans||{}),[target]:{operationStart,waves:rows}};tomorrowDraft=null;await saveState('shipping_tomorrow_plan');tomorrowMessage.textContent=`${target}の翌日計画（開始 ${operationStart}）を保存・共有しました。`;
     }
     function collect(){
       document.querySelectorAll('#cutoffRows input').forEach(input=>{const item=state.waves.find(x=>x.id===input.dataset.id);if(!item)return;const f=input.dataset.field;if(f==='planned'||f==='completed')item[f]=Math.max(0,Math.round(Number(input.value)||0));else item[f]=input.value||item[f]});
@@ -469,6 +479,8 @@
     async function bootstrapCloud(){if(isTestMode){setSync('テスト中');lastSyncText.textContent='クラウドへ保存しません';return}sharedPinValue=localStorage.getItem(PIN_SESSION)||'';if(sharedPinValue){if(await loadCloudState())closeLogin()}else setSync('PIN未認証')}
     function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
     quickWave.addEventListener('change',()=>{const item=state.waves.find(x=>x.id===quickWave.value);quickCompleted.value=item?.completed||0;renderQuickResult(quickWave.value)});
+    tomorrowRows.addEventListener('input',captureTomorrowDraft);
+    tomorrowOperationStart.addEventListener('input',captureTomorrowDraft);
     render();bootstrapCloud();
     setInterval(()=>{const rows=groupedRows();notifyAlerts();announceAlerts();renderAlerts(rows,nowMinutes())},60000);
     sharedPin.addEventListener('keydown',event=>{if(event.key==='Enter')unlockSharedPin()});
