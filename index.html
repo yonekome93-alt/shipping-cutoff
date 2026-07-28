@@ -182,7 +182,7 @@
     const SB_HEADERS={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
     const WORKSPACE_ID='4dad83ad-0fb0-451f-b375-49595c06e538';
     const PIN_SESSION='shipping-cutoff-shared-pin';
-    let sharedPinValue='',cloudBusy=false,cloudUpdatedAt='',lastCloudRevision='',saveConflict=false,longTermReports=[],reportsLoaded=false;
+    let sharedPinValue='',cloudBusy=false,cloudUpdatedAt='',lastCloudRevision='',saveConflict=false,longTermReports=[],reportsLoaded=false,formDirty=false;
     let tomorrowDraft=null;
     let currentTotalUnitsDraft=null;
     let isTestMode=localStorage.getItem(TEST_MODE_KEY)==='1';
@@ -203,8 +203,8 @@
     const clock=m=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
     const nowMinutes=()=>{const d=new Date();return d.getHours()*60+d.getMinutes()};
     const workingMinutes=(start,end)=>{let total=Math.max(0,end-start);state.breaks.forEach(([a,b])=>total-=Math.max(0,Math.min(end,b)-Math.max(start,a)));return Math.max(0,total)};
-    function load(storageKey=isTestMode?TEST_STORAGE:STORAGE){
-      let saved={};try{saved=JSON.parse(localStorage.getItem(storageKey)||'{}')}catch{}
+    function load(storageKey=isTestMode?TEST_STORAGE:STORAGE,source=null){
+      let saved={};if(source&&typeof source==='object')saved=source;else try{saved=JSON.parse(localStorage.getItem(storageKey)||'{}')}catch{}
       const old=Array.isArray(saved.waves)?saved.waves:[];
       const newDay=saved.date!==dateKey();
       const planHistory=Array.isArray(saved.planHistory)?saved.planHistory:[];
@@ -215,7 +215,7 @@
       const legacyUnits=old.reduce((s,x)=>s+(Number(x.units)||0),0),futureUnits=Number(todayFuture?.totalUnits??todayFuture?.units)||(todayFutureWaves||[]).reduce((s,x)=>s+(Number(x.units)||0),0);
       if(newDay&&saved.date&&old.some(x=>Number(x.planned)>0)&&!planHistory.some(x=>x.date===saved.date))planHistory.unshift({date:saved.date,totalUnits:Number(saved.totalUnits)||legacyUnits,waves:old.map(x=>({id:x.id,area:x.area,cutoff:x.cutoff,planned:Number(x.planned)||0})),savedAt:new Date().toISOString()});
       const savedBreaks=Array.isArray(saved.breaks)?saved.breaks.filter(x=>Array.isArray(x)&&x.length===2&&Number(x[0])<Number(x[1])).map(x=>[Number(x[0]),Number(x[1])]):[];
-      return {date:dateKey(),operationStart:nextOperationStart,totalUnits:newDay?futureUnits:(Number(saved.totalUnits)||legacyUnits),productivityMode:Boolean(saved.productivityMode),productivitySessions:Array.isArray(saved.productivitySessions)?saved.productivitySessions.slice(-2000):[],activeProductivitySession:newDay?null:(saved.activeProductivitySession||null),startWorkers,workers:newDay?startWorkers:(Number(saved.workers)||1),effectiveTime:newDay?nextOperationStart:(saved.effectiveTime||nextOperationStart),onePersonRate:Math.max(1,Number(saved.onePersonRate)||100),breaks:savedBreaks.length?savedBreaks:DEFAULT_BREAKS.map(x=>[...x]),workerChanges:Array.isArray(saved.workerChanges)?saved.workerChanges:[],progressSnapshots:newDay?[]:(Array.isArray(saved.progressSnapshots)?saved.progressSnapshots:[]),planHistory:planHistory.slice(0,60),futurePlans,reports:Array.isArray(saved.reports)?saved.reports:[],auditLog:Array.isArray(saved.auditLog)?saved.auditLog:[],undoStack:Array.isArray(saved.undoStack)?saved.undoStack:[],syncRevision:saved.syncRevision||'',syncDevice:saved.syncDevice||'',waves:defaults.map(x=>{const prev=sourceWaves.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
+      return {date:dateKey(),operationStart:nextOperationStart,totalUnits:newDay?futureUnits:(Number(saved.totalUnits)||legacyUnits),productivityMode:Boolean(saved.productivityMode),productivitySessions:Array.isArray(saved.productivitySessions)?saved.productivitySessions.slice(-2000):[],activeProductivitySession:newDay?null:(saved.activeProductivitySession||null),startWorkers,workers:newDay?startWorkers:(Number(saved.workers)||1),effectiveTime:newDay?nextOperationStart:(saved.effectiveTime||nextOperationStart),onePersonRate:Math.max(1,Number(saved.onePersonRate)||100),breaks:savedBreaks.length?savedBreaks:DEFAULT_BREAKS.map(x=>[...x]),workerChanges:newDay?[]:(Array.isArray(saved.workerChanges)?saved.workerChanges:[]),progressSnapshots:newDay?[]:(Array.isArray(saved.progressSnapshots)?saved.progressSnapshots:[]),planHistory:planHistory.slice(0,60),futurePlans,reports:Array.isArray(saved.reports)?saved.reports:[],auditLog:Array.isArray(saved.auditLog)?saved.auditLog:[],undoStack:Array.isArray(saved.undoStack)?saved.undoStack:[],syncRevision:saved.syncRevision||'',syncDevice:saved.syncDevice||'',waves:defaults.map(x=>{const prev=sourceWaves.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
     }
     let state=load();
     let lastStableState=JSON.parse(JSON.stringify(state));
@@ -239,6 +239,7 @@
       const list=snapshotsFor(id);if(list.length<2)return 0;const a=list[list.length-2],b=list[list.length-1],mins=Math.max(1,(new Date(b.at)-new Date(a.at))/60000),qty=Math.max(0,Number(b.completed)-Number(a.completed));return Math.round(qty/(mins/60))
     }
     function forecastFor(row,now=nowMinutes()){
+      if(!row)return'-';
       if(row.remaining<=0)return row.item.completedAt?new Date(row.item.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'完了';
       const rate=actualRateFor(row.item.id);if(!rate)return'実績待ち';const finish=now+Math.ceil(row.remaining/rate*60);return finish>=1440?'翌日 '+clock(finish%1440):clock(finish)
     }
@@ -311,6 +312,7 @@
     }
     function renderQuickResult(id){
       const item=state.waves.find(x=>x.id===id)||state.waves[0],row=groupedRows().find(x=>x.item.id===item.id),list=snapshotsFor(item.id),latest=list.at(-1),previous=list.at(-2),rate=actualRateFor(item.id),planRate=row?.rate||0,diff=rate-planRate;
+      if(!row){quickResult.innerHTML=`<strong>${escapeHtml(item.area)}：計画店舗数は0店舗です</strong><p>この便は現在、計算対象外です。計画店舗数を入力すると必要速度と終了予測を再計算します。</p>`;return}
       if(!latest){quickResult.innerHTML=`<strong>${escapeHtml(item.area)}：まだ進捗は入力されていません</strong><p>累計完了店舗数を入力して「進捗を保存」を押すと、次回の入力から実績速度と計画差を自動計算します。</p>`;return}
       if(!previous){quickResult.innerHTML=`<strong>${escapeHtml(item.area)}：初回の進捗を保存しました</strong><p>次回の保存時刻と累計数から、経過時間と実績速度を自動計算します。</p>`;return}
       const elapsed=Math.max(1,Math.round((new Date(latest.at)-new Date(previous.at))/60000)),increase=Math.max(0,Number(latest.completed)-Number(previous.completed));
@@ -411,7 +413,10 @@
     function setSync(text,status=''){syncStatus.textContent=text;syncStatus.className='sync '+status}
     async function saveCloudState(changeType='shipping_update'){
       if(isTestMode){setSync('テスト中');return true}
-      if(!sharedPinValue||cloudBusy)return false;cloudBusy=true;setSync('共有中');
+      if(!sharedPinValue)return false;
+      for(let i=0;cloudBusy&&i<20;i++)await new Promise(resolve=>setTimeout(resolve,100));
+      if(cloudBusy)return false;
+      cloudBusy=true;setSync('共有中');
       try{
         const check=await fetch(SB_URL+'/rest/v1/rpc/load_shipping_cutoff_state',{method:'POST',headers:SB_HEADERS,cache:'no-store',body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:sharedPinValue})});
         if(!check.ok)throw new Error('auth');const remote=await check.json();
@@ -421,11 +426,26 @@
         if(!r.ok){const detail=await r.json().catch(()=>({}));if(detail.code==='40001'||String(detail.message||'').includes('conflict')){saveConflict=true;conflictBox.hidden=false;setSync('更新競合','error');return false}throw new Error('save')}const result=await r.json();state.syncRevision=revision;state.syncDevice=deviceId;lastCloudRevision=revision;cloudUpdatedAt=result?.updated_at||clientTime;lastSyncText.textContent=`最終共有 ${new Date(cloudUpdatedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`;setSync('共有済み','ok');persist();return true
       }catch(e){setSync('共有エラー','error');return false}finally{cloudBusy=false}
     }
-    async function loadCloudState(pin=sharedPinValue){
+    async function loadCloudState(pin=sharedPinValue,{background=false}={}){
       if(isTestMode||!pin||cloudBusy)return false;cloudBusy=true;setSync('読込中');
       try{
         const r=await fetch(SB_URL+'/rest/v1/rpc/load_shipping_cutoff_state',{method:'POST',headers:SB_HEADERS,cache:'no-store',body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:pin})});
-        if(!r.ok)throw new Error('invalid');const remote=await r.json();sharedPinValue=pin;localStorage.setItem(PIN_SESSION,pin);if(remote&&remote.date){state={...state,...remote};if(!Array.isArray(state.breaks)||!state.breaks.length)state.breaks=DEFAULT_BREAKS.map(x=>[...x]);persist();lastStableState=JSON.parse(JSON.stringify(state));render()}lastCloudRevision=remote?.syncRevision||'';cloudUpdatedAt=remote?.cloudUpdatedAt||'';lastSyncText.textContent=cloudUpdatedAt?`最終共有 ${new Date(cloudUpdatedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`:'共有データなし';saveConflict=false;conflictBox.hidden=true;setSync('共有済み','ok');if(!reportsLoaded)await loadLongTermReports(pin);return true
+        if(!r.ok)throw new Error('invalid');
+        const remote=await r.json(),remoteRevision=remote?.syncRevision||'',sameRevision=Boolean(background&&remoteRevision&&remoteRevision===lastCloudRevision);
+        sharedPinValue=pin;localStorage.setItem(PIN_SESSION,pin);
+        if(background&&!sameRevision&&remote?.date&&formDirty){
+          saveConflict=true;conflictBox.hidden=false;setSync('更新競合','error');return false
+        }
+        let rolledOver=false;
+        if(remote&&remote.date&&!sameRevision){
+          if(remote.date!==dateKey()){state=load(STORAGE,remote);rolledOver=true}
+          else state={...state,...remote};
+          if(!Array.isArray(state.breaks)||!state.breaks.length)state.breaks=DEFAULT_BREAKS.map(x=>[...x]);
+          persist();formDirty=false;lastStableState=JSON.parse(JSON.stringify(state));render()
+        }
+        lastCloudRevision=remoteRevision;cloudUpdatedAt=remote?.cloudUpdatedAt||'';lastSyncText.textContent=cloudUpdatedAt?`最終共有 ${new Date(cloudUpdatedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`:'共有データなし';saveConflict=false;conflictBox.hidden=true;setSync('共有済み','ok');if(!reportsLoaded)await loadLongTermReports(pin);
+        if(rolledOver)setTimeout(()=>saveCloudState('shipping_day_rollover'),0);
+        return true
       }catch(e){setSync('PIN未認証','error');return false}finally{cloudBusy=false}
     }
     async function saveState(changeType,{record=true}={}){
@@ -433,7 +453,7 @@
         state.undoStack=[...(state.undoStack||[]),{at:new Date().toISOString(),label:changeLabels[changeType]||'データ変更',snapshot:snapshotState(lastStableState)}].slice(-20);
         state.auditLog=[...(state.auditLog||[]),{id:crypto.randomUUID?.()||String(Date.now()),at:new Date().toISOString(),label:changeLabels[changeType]||'データ変更',type:changeType,mode:isTestMode?'test':'production'}].slice(-100);
       }
-      persist();render();const saved=await saveCloudState(changeType);if(saved||isTestMode)lastStableState=JSON.parse(JSON.stringify(state));return saved
+      formDirty=false;persist();render();const saved=await saveCloudState(changeType);if(saved||isTestMode)lastStableState=JSON.parse(JSON.stringify(state));return saved
     }
     async function resolveConflict(){await loadCloudState();saveMessage.textContent='最新の共有データを読み込みました。もう一度入力してください。'}
     async function undoLastChange(){
@@ -627,7 +647,8 @@
     render();bootstrapCloud();
     setInterval(()=>{const rows=groupedRows();notifyAlerts();announceAlerts();renderAlerts(rows,nowMinutes())},60000);
     sharedPin.addEventListener('keydown',event=>{if(event.key==='Enter')unlockSharedPin()});
-    setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState()},15000);
+    document.addEventListener('input',event=>{if(event.target.closest('#app')&&event.target.matches('input,textarea'))formDirty=true});
+    setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState(sharedPinValue,{background:true})},15000);
     if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
   </script>
 </body>
