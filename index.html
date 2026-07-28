@@ -286,8 +286,9 @@
       operationStart.value=state.operationStart||'09:30';operationSummaryText.textContent=`${state.operationStart||'09:30'}から最終締切まで。休憩時間を自動で除外します。`;
       doneSummary.textContent=`${done}／${state.waves.length}便`;soonSummary.textContent=`${pending.filter(x=>x.deadline>now&&x.deadline-now<=60).length}便`;lateSummary.textContent=`${pending.filter(x=>now>=x.deadline).length}便`;remainSummary.textContent=`${pending.reduce((s,x)=>s+x.remaining,0).toLocaleString()}店舗`;unitSummary.textContent=`${(Number(state.totalUnits)||0).toLocaleString()}ユニット`;totalUnitsInput.value=(currentTotalUnitsDraft??Number(state.totalUnits))||0;
       initialWorkerCount.value=String(state.startWorkers||1);workerChangeCount.value=String(state.workers);workerTime.value=state.effectiveTime;onePersonRate.value=state.onePersonRate;changeOnePersonRate.value=state.onePersonRate;
+      const selectedQuickWaveId=quickWave.value;
       quickWave.innerHTML=state.waves.map(x=>`<option value="${x.id}">${escapeHtml(x.area)}（${x.cutoff}）</option>`).join('');
-      const selected=state.waves.find(x=>x.id===quickWave.value)||state.waves[0];quickWave.value=selected.id;quickCompleted.value=selected.completed;
+      const selected=state.waves.find(x=>x.id===selectedQuickWaveId)||state.waves[0];quickWave.value=selected.id;quickCompleted.value=selected.completed;
       renderNext(pending[0],now);renderWorker(pending,now);renderCards(rows,now);renderTable(rows,now);renderTomorrowPlan();renderAlerts(rows,now);renderWorkerHistory();renderBreakSettings();renderQuickResult(selected.id);renderProductivity();renderReports();renderAuditHistory();
     }
     function renderNext(next,now){
