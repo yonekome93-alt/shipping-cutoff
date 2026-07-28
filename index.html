@@ -199,6 +199,8 @@
     const DEFAULT_BREAKS=[[630,645],[720,780],[930,945]];
     const dateKey=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
     const offsetDateKey=days=>{const d=new Date();d.setDate(d.getDate()+days);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+    const timestampDateKey=value=>{const d=new Date(value);return Number.isNaN(d.getTime())?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+    const hasTodayActivity=value=>Array.isArray(value?.waves)&&value.waves.some(x=>timestampDateKey(x.completedAt)===dateKey())||Array.isArray(value?.progressSnapshots)&&value.progressSnapshots.some(x=>timestampDateKey(x.at)===dateKey())||Array.isArray(value?.auditLog)&&value.auditLog.some(x=>timestampDateKey(x.at)===dateKey());
     const minutes=t=>{const [h,m]=String(t).split(':').map(Number);return h*60+m};
     const clock=m=>`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
     const nowMinutes=()=>{const d=new Date();return d.getHours()*60+d.getMinutes()};
@@ -438,7 +440,10 @@
         }
         let rolledOver=false;
         if(remote&&remote.date&&!sameRevision){
-          if(remote.date!==dateKey()){state=load(STORAGE,remote);rolledOver=true}
+          if(remote.date!==dateKey()){
+            if(hasTodayActivity(remote))state={...state,...remote,date:dateKey()};
+            else{state=load(STORAGE,remote);rolledOver=true}
+          }
           else state={...state,...remote};
           if(!Array.isArray(state.breaks)||!state.breaks.length)state.breaks=DEFAULT_BREAKS.map(x=>[...x]);
           persist();formDirty=false;lastStableState=JSON.parse(JSON.stringify(state));render()
