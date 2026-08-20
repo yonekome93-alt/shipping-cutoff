@@ -15,19 +15,33 @@
     state.progressCheckpoints=Array.isArray(state.progressCheckpoints)?state.progressCheckpoints:[];
     state.completionDismissals=Array.isArray(state.completionDismissals)?state.completionDismissals:[];
     state.workerMaster.forEach(w=>{w.id=w.id||opsUuid();w.name=w.name||'名称未設定';w.barcode=w.barcode||''});
+    if(!state.staffingTimeline.length&&(state.workerSessions.length||state.workerChanges?.length))opsRebuildStaffingTimeline();
   }
   function opsWorker(id){return state.workerMaster.find(w=>w.id===id)}
   function opsActiveSessions(at=new Date()){
     const time=at instanceof Date?at:new Date(at);
     return state.workerSessions.filter(s=>new Date(s.startAt)<=time&&(!s.endAt||new Date(s.endAt)>time));
   }
-  function shipPaceCurrentWorkerCount(){return opsActiveSessions().length}
+  function shipPaceCurrentWorkerCount(at=new Date()){
+    const time=at instanceof Date?at:new Date(at),hasTimeline=state.staffingTimeline.some(event=>new Date(event.at)<=time);
+    if(!hasTimeline)return opsActiveSessions(time).length;
+    const event=opsLatestStaffingAt(time);
+    return Number.isFinite(Number(event?.count))?Math.max(0,Number(event.count)):opsActiveSessions(time).length;
+  }
   window.shipPaceCurrentWorkerCount=shipPaceCurrentWorkerCount;
   function opsActiveIds(at=new Date()){return opsActiveSessions(at).map(s=>s.workerId)}
   function opsRecordStaffing(at,source,count=null,activeIds=null){
     const ids=activeIds||opsActiveIds(new Date(at));
     state.staffingTimeline.push({id:opsUuid(),at,source,count:count===null?ids.length:Number(count)||0,activeWorkerIds:[...ids]});
     state.staffingTimeline=state.staffingTimeline.sort((a,b)=>new Date(a.at)-new Date(b.at)).slice(-2000);
+  }
+  function opsRebuildStaffingTimeline(){
+    const events=[{at:opsIsoAt(state.operationStart||'09:30'),kind:'operation_start',count:0}];
+    state.workerSessions.forEach(session=>{if(session.startAt)events.push({at:session.startAt,kind:'worker_start',workerId:session.workerId});if(session.endAt)events.push({at:session.endAt,kind:'worker_end',workerId:session.workerId})});
+    (state.workerChanges||[]).filter(change=>change.kind==='manual_override').forEach(change=>events.push({at:opsIsoAt(change.time||state.operationStart||'09:30'),kind:'manual_override',count:Math.max(0,Number(change.workers)||0)}));
+    events.sort((a,b)=>new Date(a.at)-new Date(b.at));const active=new Set(),timeline=[];
+    events.forEach(event=>{if(event.kind==='worker_start')active.add(event.workerId);if(event.kind==='worker_end')active.delete(event.workerId);const count=event.kind==='manual_override'?event.count:active.size;timeline.push({id:opsUuid(),at:event.at,source:event.kind,count,activeWorkerIds:[...active]})});
+    state.staffingTimeline=timeline.slice(-2000);
   }
   function opsLatestStaffingAt(at){
     const t=at instanceof Date?at:new Date(at),events=state.staffingTimeline.filter(e=>new Date(e.at)<=t).sort((a,b)=>new Date(a.at)-new Date(b.at));
@@ -64,8 +78,10 @@
   window.endActiveWorker=id=>opsSetWorkerActive(id,false,'manual_end');
 
   function renderActiveWorkers(){
-    const active=opsActiveSessions(),list=$('activeWorkerList');$('activeWorkerCount').textContent=`${active.length}名`;
-    list.innerHTML=active.length?active.map(s=>{const w=opsWorker(s.workerId),mins=Math.max(0,Math.floor((Date.now()-new Date(s.startAt))/60000));return `<div class="active-worker-row"><div><b>${escapeHtml(w?.name||'不明な作業者')}</b><small>${new Date(s.startAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}〜　作業中${opsFormatDuration(mins)}</small></div><button class="secondary" onclick="endActiveWorker('${s.workerId}')">終了</button></div>`}).join(''):'<div class="history-item"><span>現在作業中の作業者はいません</span></div>';
+    const active=opsActiveSessions(),effective=shipPaceCurrentWorkerCount(),list=$('activeWorkerList'),manualDifference=effective-active.length;$('activeWorkerCount').textContent=`${effective}名`;
+    const named=active.map(s=>{const w=opsWorker(s.workerId),mins=Math.max(0,Math.floor((Date.now()-new Date(s.startAt))/60000));return `<div class="active-worker-row"><div><b>${escapeHtml(w?.name||'不明な作業者')}</b><small>${new Date(s.startAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}〜　作業中${opsFormatDuration(mins)}</small></div><button class="secondary" onclick="endActiveWorker('${s.workerId}')">終了</button></div>`}).join('');
+    const correction=manualDifference?`<div class="history-item"><span><b>手動補正 ${manualDifference>0?'+':''}${manualDifference}名</b><br><small>有効人数タイムラインへ反映中</small></span></div>`:'';
+    list.innerHTML=named+correction||(effective?'<div class="history-item"><span>手動補正人数で稼働中です</span></div>':'<div class="history-item"><span>現在作業中の作業者はいません</span></div>');
   }
   async function addWorkerMaster(){
     const input=$('newWorkerName'),name=input.value.trim();if(!name){$('workerMasterMessage').textContent='作業者名を入力してください。';return}
@@ -109,7 +125,9 @@
   window.openManualAttendance=openManualAttendance;window.closeManualAttendance=closeManualAttendance;window.renderManualAttendance=renderManualAttendance;
 
   function opsTargetMinutes(){
-    const start=minutes(state.operationStart||'09:30'),final=Math.max(start,...state.waves.filter(w=>w.planned>0).map(w=>minutes(w.cutoff)));let out=[];for(let t=start+60;t<=final;t+=60)out.push(t);if(!out.includes(final)&&final>start)out.push(final);return [...new Set(out)].sort((a,b)=>a-b);
+    const start=minutes(state.operationStart||'09:30'),final=Math.max(start,...state.waves.filter(w=>w.planned>0).map(w=>minutes(w.cutoff))),first=start%60===0?start+60:Math.ceil(start/60)*60,out=[];
+    for(let t=first;t<=final;t+=60)out.push(t);
+    return out;
   }
   function opsTargetIso(targetMinute){return opsIsoAt(clock(targetMinute))}
   function opsCheckpoint(targetMinute){return state.progressCheckpoints.find(x=>x.targetMinute===targetMinute)}
@@ -121,10 +139,16 @@
   function opsLatestCheckpoint(now=nowMinutes()){return [...state.progressCheckpoints].filter(x=>x.targetMinute<=now).sort((a,b)=>a.targetMinute-b.targetMinute).at(-1)||null}
   function opsNextTarget(){const times=opsTargetMinutes(),now=nowMinutes(),missing=times.find(t=>t<=now&&!opsCheckpoint(t));return missing??times.find(t=>t>now)??times.at(-1)??minutes(state.operationStart||'09:30')}
   function renderProgressTarget(){
-    const select=$('progressTargetTime'),current=Number(select.value),times=opsTargetMinutes();select.innerHTML=times.map(t=>`<option value="${t}">${clock(t)}時点${opsCheckpoint(t)?'（入力済み）':''}</option>`).join('');const target=times.includes(current)?current:opsNextTarget();if(Number.isFinite(target))select.value=String(target);renderProgressTiming();
+    const select=$('progressTargetTime'),current=Number(select.value),times=opsTargetMinutes();select.innerHTML=times.map(t=>`<option value="${t}">${clock(t)}時点${opsCheckpoint(t)?'（入力済み）':''}</option>`).join('');const manualOpen=Boolean($('manualProgressDetails')?.open),target=manualOpen&&times.includes(current)?current:opsNextTarget();if(Number.isFinite(target))select.value=String(target);renderProgressTiming();
   }
-  function renderProgressTiming(){const target=Number($('progressTargetTime')?.value),checkpoint=opsCheckpoint(target);if(!Number.isFinite(target))return;const delay=nowMinutes()-target;$('progressTitle').textContent=`${clock(target)}時点の進捗`;$('progressTimingMessage').textContent=delay>0?`現在時刻 ${clock(nowMinutes())}・${delay}分遅れて入力しています`:delay===0?'現在時刻の対象データです':`${clock(target)}時点の後入力・修正ができます`;if(checkpoint){const wave=checkpoint.waveValues?.[$('quickWave').value];if(wave!==undefined)$('quickCompleted').value=wave}}
+  function renderProgressTiming(){
+    const target=Number($('progressTargetTime')?.value),checkpoint=opsCheckpoint(target);if(!Number.isFinite(target))return;const delay=nowMinutes()-target;
+    $('progressTitle').textContent=`${clock(target)}時点の進捗`;$('progressTimingMessage').textContent=delay>0?`現在時刻 ${clock(nowMinutes())}・${delay}分遅れて入力しています`:delay===0?'現在時刻の対象データです':`${clock(target)}時点の後入力・修正ができます`;
+    const previous=[...state.progressCheckpoints].filter(x=>x.targetMinute<target).sort((a,b)=>a.targetMinute-b.targetMinute).at(-1);$('quickCompleted').value=checkpoint?.totalCompleted??previous?.totalCompleted??0;
+    const waveValue=checkpoint?.waveValues?.[$('quickWave').value];$('manualWaveCompleted').value=waveValue!==undefined?waveValue:(state.waves.find(w=>w.id===$('quickWave').value)?.completed||0);
+  }
   $('progressTargetTime').addEventListener('change',renderProgressTiming);
+  $('manualProgressDetails').addEventListener('toggle',()=>{if(!$('manualProgressDetails').open)renderProgressTarget()});
 
   function opsIntervalRows(){
     const start=minutes(state.operationStart||'09:30'),times=[start,...opsTargetMinutes()],rows=[];let cumPlan=0;
@@ -148,11 +172,18 @@
     const times=opsTargetMinutes(),now=nowMinutes(),missing=times.find(t=>t<=now&&!opsCheckpoint(t));$('snapshotStatus').innerHTML=times.map(t=>{const cp=opsCheckpoint(t),kind=cp?'done':t<=now?'missing':'',label=cp?'✓ 入力済み':t<=now?'⚠ 未入力':'― これから';return `<span class="snapshot-chip ${kind}">${clock(t)}　${label}</span>`}).join('');
     const reminder=$('progressReminder');if(missing!==undefined){const late=Math.max(0,now-missing);reminder.hidden=false;reminder.innerHTML=`<b>⚠ ${clock(missing)}時点の進捗が未入力です</b><p>${late?`現在${late}分遅れです。`:'累計完了店舗数を入力してください。'}</p><button class="primary" onclick="goToProgressTarget(${missing})">進捗入力へ</button>`}else reminder.hidden=true;
   }
+  function opsGlobalActualRate(){
+    const checkpoints=[...state.progressCheckpoints].sort((a,b)=>a.targetMinute-b.targetMinute);
+    if(!checkpoints.length)return 0;
+    const end=checkpoints.at(-1),start=checkpoints.length>1?checkpoints.at(-2):{targetMinute:minutes(state.operationStart||'09:30'),totalCompleted:0};
+    const productive=workingMinutes(start.targetMinute,end.targetMinute),processed=Math.max(0,Number(end.totalCompleted)-Number(start.totalCompleted));
+    return productive>0&&processed>0?processed/(productive/60):0;
+  }
   function goToProgressTarget(target){$('progressTargetTime').value=String(target);renderProgressTiming();$('progressPanel').scrollIntoView({behavior:'smooth',block:'start'})}
   window.goToProgressTarget=goToProgressTarget;
   function renderDashboard(){
-    const latest=opsLatestCheckpoint(),target=latest?.targetMinute??minutes(state.operationStart||'09:30'),actual=latest?.totalCompleted??0,plan=opsPlanCumulativeAt(target),diff=actual-plan,human=opsHumanMinutes(new Date(opsTargetIso(minutes(state.operationStart||'09:30'))),new Date(opsTargetIso(target))),productivity=human?actual/(human/60):null,current=shipPaceCurrentWorkerCount(),next=groupedRows().find(x=>x.item.planned>0&&!x.item.completedAt),required=next?requiredWorkersFor(next,nowMinutes()):0,gap=required>=99?null:required-current,action=gap===null?'至急、配置を確認':gap>0?`${gap}名増員推奨`:gap<0?`${Math.abs(gap)}名余力あり`:'増員不要';
-    let finish='実績蓄積中';if(next){const forecast=forecastFor(next);if(/^\d{2}:\d{2}$/.test(forecast)){const delta=minutes(forecast)-next.deadline;finish=Math.abs(delta)<=2?'予定どおり完了見込み':`予定より約${Math.abs(delta)}分${delta<0?'早く':'遅れて'}完了見込み`}}
+    const rows=groupedRows(),latest=opsLatestCheckpoint(),target=latest?.targetMinute??minutes(state.operationStart||'09:30'),actual=latest?.totalCompleted??0,plan=opsPlanCumulativeAt(target),diff=actual-plan,human=opsHumanMinutes(new Date(opsTargetIso(minutes(state.operationStart||'09:30'))),new Date(opsTargetIso(target))),productivity=human?actual/(human/60):null,current=shipPaceCurrentWorkerCount(),pending=rows.filter(x=>x.item.planned>0&&!x.item.completedAt),next=pending[0],finalPending=pending.at(-1),required=next?requiredWorkersFor(next,nowMinutes()):0,gap=required>=99?null:required-current,action=gap===null?'至急、配置を確認':gap>0?`${gap}名増員推奨`:gap<0?`${Math.abs(gap)}名余力あり`:'増員不要';
+    let finish=pending.length?'実績蓄積中':'本日の便は完了';if(finalPending){const rate=opsGlobalActualRate(),remaining=pending.reduce((sum,row)=>sum+row.remaining,0),forecast=rate?finishAtRate(nowMinutes(),remaining,rate):null;if(forecast!==null){const delta=forecast-finalPending.deadline;finish=Math.abs(delta)<=2?'予定どおり完了見込み':`予定より約${Math.abs(delta)}分${delta<0?'早く':'遅れて'}完了見込み`}}
     const nextTarget=opsNextTarget(),cp=opsCheckpoint(nextTarget),tone=diff>0?'ahead':diff<0?'behind':'on-plan';$('currentProgressDashboard').innerHTML=`<div class="ops-dashboard-head"><div><div class="eyebrow">CURRENT PROGRESS</div><h2>現在の進捗</h2></div><span class="ops-asof">${latest?clock(target)+'時点':'実績待ち'}</span></div><div class="ops-variance ${tone}">${opsDiffLabel(diff,'計画')}</div><div class="ops-dashboard-grid"><div class="ops-kpi"><small>計画累計｜実績累計</small><strong>${plan.toLocaleString()}｜${actual.toLocaleString()}店舗</strong></div><div class="ops-kpi"><small>累計 全体生産性</small><strong>${productivity===null?'実績待ち':productivity.toFixed(1)+' 店舗/人時'}</strong></div><div class="ops-kpi"><small>完了見込み</small><strong>${finish}</strong></div><div class="ops-kpi"><small>現在人数｜必要人数</small><strong>${current}名｜${required>=99?'算出不可':required+'名'}</strong></div><div class="ops-kpi"><small>最新の進捗入力</small><strong>${cp?'✓ 入力済み':nextTarget<=nowMinutes()?'⚠ 未入力':'― これから'}</strong></div></div><div class="ops-action ${gap>0||gap===null?'warn':''}">${action}</div>`;
   }
 
@@ -160,10 +191,10 @@
     const rows=groupedRows().filter(x=>x.item.planned>0),cards=[...$('paceGrid').querySelectorAll('.pace-card')],now=nowMinutes();
     cards.forEach((card,index)=>{const row=rows[index];if(!row)return;const done=Boolean(row.item.completedAt),awaiting=row.remaining===0&&!done,late=!done&&!awaiting&&now>=row.deadline,active=!done&&!awaiting&&now>=row.start&&now<row.deadline,status=done?'完了':awaiting?'完了確認待ち':late?'締切超過':active?'処理時間中':'待機',tone=done?'var(--green)':awaiting?'var(--amber)':late?'var(--red)':active?'var(--amber)':'var(--blue)',bg=done?'#f0faf6':awaiting?'#fff9ed':late?'#fff1f3':active?'#fff9ed':'#f7f9fd';card.style.setProperty('--tone',tone);card.style.setProperty('--card-bg',bg);const label=card.querySelector('.status');if(label)label.textContent=status;if(awaiting){const forecast=card.querySelector('.note b');if(forecast)forecast.textContent='終了予測 完了確認待ち'}});
   }
-  function opsShowBuild(){let badge=$('shipPaceBuild');if(!badge){badge=document.createElement('span');badge.id='shipPaceBuild';badge.style.cssText='font-size:10px;font-weight:900;color:#667085;white-space:nowrap';document.querySelector('header .ops-status')?.appendChild(badge)}if(badge)badge.textContent='v36'}
+  function opsShowBuild(){let badge=$('shipPaceBuild');if(!badge){badge=document.createElement('span');badge.id='shipPaceBuild';badge.style.cssText='font-size:10px;font-weight:900;color:#667085;white-space:nowrap';document.querySelector('header .ops-status')?.appendChild(badge)}if(badge)badge.textContent='v37'}
 
   const opsLegacyRender=render;
-  render=function(){opsEnsureState();opsLegacyRender();opsCorrectPaceCards();opsShowBuild();renderProgressTarget();renderDashboard();renderActiveWorkers();renderProgressStatus();renderHourlyProductivity();renderPerformance();renderWorkerMaster()};
+  render=function(){opsEnsureState();state.workers=shipPaceCurrentWorkerCount();opsLegacyRender();opsCorrectPaceCards();opsShowBuild();renderProgressTarget();renderDashboard();renderActiveWorkers();renderProgressStatus();renderHourlyProductivity();renderPerformance();renderWorkerMaster()};
 
   function recordProgressCheckpoint({id,completed,targetMinute,inputAt=new Date().toISOString(),source='manual_snapshot'}){
     const targetAt=opsTargetIso(targetMinute);let legacy=state.progressSnapshots.find(x=>x.waveId===id&&Number(x.targetMinute)===targetMinute);if(legacy)Object.assign(legacy,{completed,at:targetAt,targetAt,inputAt,source});else state.progressSnapshots.push({id:opsUuid(),waveId:id,completed,interval:0,at:targetAt,targetAt,inputAt,targetMinute,source});
@@ -171,18 +202,42 @@
     state.waves.forEach(w=>{const latest=state.progressSnapshots.filter(x=>x.waveId===w.id).sort((a,b)=>new Date(a.targetAt||a.at)-new Date(b.targetAt||b.at)).at(-1);if(latest)w.completed=Number(latest.completed)||0});return{checkpoint,totalCompleted,targetAt,inputAt};
   }
   window.shipPaceRecordProgressCheckpoint=recordProgressCheckpoint;
+  function opsOrderedWaves(){return state.waves.map((wave,index)=>({wave,index})).filter(x=>x.wave.planned>0).sort((a,b)=>minutes(a.wave.cutoff)-minutes(b.wave.cutoff)||a.index-b.index).map(x=>x.wave)}
+  function opsAllocateGlobalTotal(total){
+    const ordered=opsOrderedWaves(),values=Object.fromEntries(state.waves.map(w=>[w.id,0]));let remaining=Math.max(0,Math.round(Number(total)||0));
+    ordered.forEach(w=>{const value=Math.min(remaining,Math.max(0,Number(w.planned)||0));values[w.id]=value;remaining-=value});
+    if(remaining>0&&ordered.length)values[ordered.at(-1).id]+=remaining;
+    return values;
+  }
+  function recordGlobalCheckpoint({totalCompleted,targetMinute,inputAt=new Date().toISOString(),source='global_snapshot'}){
+    const total=Math.max(0,Math.round(Number(totalCompleted)||0)),waveValues=opsAllocateGlobalTotal(total),targetAt=opsTargetIso(targetMinute);let checkpoint=opsCheckpoint(targetMinute);
+    state.waves.forEach(w=>{const completed=Number(waveValues[w.id])||0;let snapshot=state.progressSnapshots.find(x=>x.waveId===w.id&&Number(x.targetMinute)===targetMinute);if(snapshot)Object.assign(snapshot,{completed,at:targetAt,targetAt,inputAt,source});else state.progressSnapshots.push({id:opsUuid(),waveId:w.id,completed,interval:0,at:targetAt,targetAt,inputAt,targetMinute,source})});
+    if(checkpoint)Object.assign(checkpoint,{inputAt,totalCompleted:total,waveValues,updatedAt:inputAt,source});else{checkpoint={id:opsUuid(),targetMinute,targetAt,inputAt,totalCompleted:total,waveValues,createdAt:inputAt,source};state.progressCheckpoints.push(checkpoint)}
+    state.progressCheckpoints.sort((a,b)=>a.targetMinute-b.targetMinute);state.progressSnapshots=state.progressSnapshots.slice(-1000);
+    state.waves.forEach(w=>{const latest=state.progressSnapshots.filter(x=>x.waveId===w.id).sort((a,b)=>new Date(a.targetAt||a.at)-new Date(b.targetAt||b.at)).at(-1);if(latest)w.completed=Number(latest.completed)||0});
+    return{checkpoint,waveValues,totalCompleted:total,targetAt,inputAt};
+  }
+  function opsPromptReachedWave(waveValues,targetMinute){
+    const item=opsOrderedWaves().find(w=>(Number(waveValues[w.id])||0)>=Number(w.planned)&&!w.completedAt&&!state.completionDismissals.some(x=>x.waveId===w.id&&x.targetMinute===targetMinute));if(!item)return false;
+    opsCompletionCandidate={waveId:item.id,targetMinute};$('completionPrompt').textContent=`${item.area}は計画${item.planned}店舗に到達しました（実績${waveValues[item.id]}店舗）。この便の出荷作業は完了しましたか？`;$('completionModal').classList.add('open');return true;
+  }
   async function opsSaveSnapshot(){
-    const id=$('quickWave').value,item=state.waves.find(x=>x.id===id),completed=Math.max(0,Math.round(Number($('quickCompleted').value)||0)),targetMinute=Number($('progressTargetTime').value);if(!item||!Number.isFinite(targetMinute))return;
-    const {checkpoint}=recordProgressCheckpoint({id,completed,targetMinute});
-    await saveState(checkpoint?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').scrollIntoView({behavior:'smooth',block:'center'});
-    if(item.planned>0&&completed>=item.planned&&!item.completedAt&&!state.completionDismissals.some(x=>x.waveId===id&&x.targetMinute===targetMinute)){opsCompletionCandidate={waveId:id,targetMinute};$('completionPrompt').textContent=`${item.area}は計画${item.planned}店舗に到達しました（実績${completed}店舗）。この便の出荷作業は完了しましたか？`;$('completionModal').classList.add('open')}
+    const totalCompleted=Math.max(0,Math.round(Number($('quickCompleted').value)||0)),targetMinute=opsNextTarget();if(!Number.isFinite(targetMinute))return;
+    const existed=Boolean(opsCheckpoint(targetMinute)),{waveValues}=recordGlobalCheckpoint({totalCompleted,targetMinute});
+    await saveState(existed?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').innerHTML=`<strong>${clock(targetMinute)}時点の累計${totalCompleted.toLocaleString()}店舗を保存しました</strong><p>対象時刻と方面別進捗を自動判定し、計画差・生産性・必要ペースを再計算しました。</p>`;$('quickResult').scrollIntoView({behavior:'smooth',block:'center'});
+    opsPromptReachedWave(waveValues,targetMinute);
   }
   saveQuickProgress=opsSaveSnapshot;
+  async function saveManualWaveProgress(){
+    const id=$('quickWave').value,item=state.waves.find(x=>x.id===id),completed=Math.max(0,Math.round(Number($('manualWaveCompleted').value)||0)),targetMinute=Number($('progressTargetTime').value);if(!item||!Number.isFinite(targetMinute))return;
+    const existed=Boolean(opsCheckpoint(targetMinute)),{checkpoint}=recordProgressCheckpoint({id,completed,targetMinute,source:'manual_wave_correction'});await saveState(existed?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').innerHTML=`<strong>${clock(targetMinute)}時点の${escapeHtml(item.area)}を${completed.toLocaleString()}店舗へ修正しました</strong><p>関連する時間帯実績・人時・生産性を再計算しました。</p>`;opsPromptReachedWave(checkpoint.waveValues,targetMinute);
+  }
+  window.saveManualWaveProgress=saveManualWaveProgress;
   async function confirmReachedWave(){const candidate=opsCompletionCandidate;if(!candidate)return;$('completionModal').classList.remove('open');opsCompletionCandidate=null;await completeWave(candidate.waveId);$('quickResult').innerHTML=`<strong>${escapeHtml(state.waves.find(x=>x.id===candidate.waveId)?.area||'便')}を完了しました</strong><p>方面別 出荷締切へ反映し、次便の必要ペースと終了予測を再計算しました。</p>`}
   async function dismissReachedWave(){const c=opsCompletionCandidate;if(c){const item=state.waves.find(x=>x.id===c.waveId),at=new Date().toISOString(),deferred={...c,at};if(item)item.completedAt=null;state.completionDismissals=state.completionDismissals.filter(x=>!(x.waveId===c.waveId&&x.targetMinute===c.targetMinute));state.completionDismissals.push(deferred);rememberDeferredCompletion(deferred)}$('completionModal').classList.remove('open');opsCompletionCandidate=null;await saveState('shipping_completion_deferred');$('quickResult').insertAdjacentHTML('beforeend','<p><strong>未完了で保存しました。</strong> 便は完了扱いにせず、進捗だけを保存しています。</p>')}
   window.confirmReachedWave=confirmReachedWave;window.dismissReachedWave=dismissReachedWave;
 
-  saveStartSettings=async function(){const next=operationStart.value||'09:30';state.operationStart=next;state.effectiveTime=next;state.staffingTimeline=[];opsRecordStaffing(opsIsoAt(next),'operation_start',shipPaceCurrentWorkerCount(),opsActiveIds());await saveState('shipping_start_change');workerMessage.textContent=`今日の計画開始を${next}に設定しました。作業者の人時は実際の参加時刻から計算します。`};
+  saveStartSettings=async function(){const next=operationStart.value||'09:30';state.operationStart=next;state.effectiveTime=next;opsRebuildStaffingTimeline();await saveState('shipping_start_change');workerMessage.textContent=`今日の計画開始を${next}に設定しました。作業者の人時は実際の参加時刻から計算します。`};
   applyWorkers=async function(){const count=Math.max(0,Number(workerChangeCount.value)||0),time=workerTime.value||clock(nowMinutes()),at=opsIsoAt(time);state.workers=count;state.effectiveTime=time;if(changeRateToggle.checked)state.onePersonRate=Math.max(1,Number(changeOnePersonRate.value)||state.onePersonRate);state.workerChanges.push({time,workers:count,onePersonRate:state.onePersonRate,operationStart:state.operationStart,kind:'manual_override',rateChanged:changeRateToggle.checked,savedAt:new Date().toISOString()});opsRecordStaffing(at,'manual_override',count,[]);await saveState('shipping_worker_change');workerMessage.textContent=`非常用修正：${time}から${count}名として人数タイムラインを修正しました。バーコード人数との二重計上はありません。`};
   const opsLegacyCompleteWave=completeWave;completeWave=async function(id){state.completionDismissals=state.completionDismissals.filter(x=>x.waveId!==id);forgetDeferredCompletion(id);await opsLegacyCompleteWave(id);render()};
   resetToday=async function(){if(!confirm('本日の完了店舗数・完了時刻・作業者記録をリセットしますか？'))return;state.waves.forEach(x=>{x.completed=0;x.completedAt=null});state.progressSnapshots=[];state.progressCheckpoints=[];state.workerSessions=[];state.staffingTimeline=[];state.completionDismissals=[];clearDeferredCompletionGuards();state.productivitySessions=(state.productivitySessions||[]).filter(x=>x.date!==state.date);state.activeProductivitySession=null;await saveState('shipping_reset');saveMessage.textContent='本日の実績・作業者・人数・進捗スナップショットをリセットしました。'};
@@ -191,7 +246,11 @@
   const opsLegacyReportSummary=reportSummary;reportSummary=function(){const base=opsLegacyReportSummary(),latest=opsLatestCheckpoint(),human=latest?opsHumanMinutes(new Date(opsTargetIso(minutes(state.operationStart||'09:30'))),new Date(latest.targetAt)):0;return{...base,currentWorkers:shipPaceCurrentWorkerCount(),workerMaster:state.workerMaster,workerSessions:state.workerSessions,staffingTimeline:state.staffingTimeline,progressCheckpoints:state.progressCheckpoints,hourlyProductivity:opsIntervalRows(),cumulativeHumanHours:human/60,cumulativeProductivity:latest&&human?latest.totalCompleted/(human/60):0,performance:opsPerformanceAllocation()}};
 
   function opsFoldSecondaryPanels(){
-    const headings=['作業者別 生産性','翌日分の出荷計画','入力履歴・取り消し'];document.querySelectorAll('section.panel').forEach(section=>{const h=section.querySelector('h2');if(!h||!headings.includes(h.textContent.trim())||section.dataset.folded)return;const details=document.createElement('details');details.className=`panel details-panel ${section.classList.contains('future-panel')?'future-panel':''}`;details.dataset.folded='1';const summary=document.createElement('summary');summary.textContent=h.textContent;const inner=document.createElement('div');inner.className='details-inner';while(section.firstChild)inner.appendChild(section.firstChild);details.append(summary,inner);section.replaceWith(details)});
+    const labels=new Map([['旧記録・手動補正','旧記録・手動補正'],['翌日分の出荷計画','翌日分の出荷計画'],['入力履歴・取り消し','入力履歴・取り消し'],['全方面トータル必要ペース','運用設定・手動修正']]);document.querySelectorAll('section.panel').forEach(section=>{const h=section.querySelector('h2'),label=labels.get(h?.textContent.trim());if(!h||!label||section.dataset.folded)return;const details=document.createElement('details');details.className=`panel details-panel ${section.classList.contains('future-panel')?'future-panel':''}`;details.dataset.folded='1';details.id=section.id;const summary=document.createElement('summary');summary.textContent=label;const inner=document.createElement('div');inner.className='details-inner';while(section.firstChild)inner.appendChild(section.firstChild);details.append(summary,inner);section.replaceWith(details)});
   }
-  opsEnsureState();opsFoldSecondaryPanels();render();
+  function opsOrganizeMainView(){
+    const reminder=$('progressReminderPanel'),progress=$('progressPanel'),nextPanel=$('nextActionPanel'),pace=$('paceGrid')?.closest('.panel'),hourly=$('hourlyProductivity')?.closest('.panel'),ranking=$('personalRanking')?.closest('.panel'),settings=$('operationSettingsPanel');
+    if(reminder&&progress)reminder.after(progress);if(progress&&nextPanel)progress.after(nextPanel);if(nextPanel&&pace)nextPanel.after(pace);if(pace&&hourly)pace.after(hourly);if(ranking&&settings)ranking.after(settings);
+  }
+  opsEnsureState();opsFoldSecondaryPanels();opsOrganizeMainView();render();
 })();
