@@ -270,8 +270,7 @@
       for(const dismissal of target.completionDismissals){
         const item=target.waves.find(x=>x.id===dismissal.waveId);
         if(!item||!item.completedAt)continue;
-        const completedAt=new Date(item.completedAt).getTime(),deferredAt=new Date(dismissal.at||0).getTime();
-        if(!Number.isFinite(completedAt)||!Number.isFinite(deferredAt)||deferredAt>=completedAt)item.completedAt=null;
+        item.completedAt=null;
       }
       return target;
     }
@@ -732,8 +731,8 @@
     sharedPin.addEventListener('keydown',event=>{if(event.key==='Enter')unlockSharedPin()});
     document.addEventListener('input',event=>{if(event.target.closest('#app')&&event.target.matches('input,textarea'))formDirty=true});
     setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState(sharedPinValue,{background:true})},15000);
-    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=33').catch(()=>{}));
   </script>
-  <script src="./ship-pace-ops.js"></script>
+  <script src="./ship-pace-ops.js?v=33"></script>
 </body>
 </html>
