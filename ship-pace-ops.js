@@ -6,7 +6,7 @@
   const opsIsoAt=time=>new Date(`${state.date}T${time}:00`).toISOString();
   const opsMinutesAt=iso=>{const d=new Date(iso);return d.getHours()*60+d.getMinutes()};
   const opsFormatDuration=mins=>`${Math.floor(mins/60)?Math.floor(mins/60)+'時間':''}${Math.round(mins%60)}分`;
-  let opsCompletionCandidate=null,opsScanner=null,opsScannerMode='attendance',opsLinkWorkerId='',opsLastScan=new Map();
+  let opsCompletionCandidate=null,opsCompletionQueue=[],opsScanner=null,opsScannerMode='attendance',opsLinkWorkerId='',opsLastScan=new Map();
 
   function opsEnsureState(){
     state.workerMaster=Array.isArray(state.workerMaster)?state.workerMaster:[];
@@ -191,7 +191,7 @@
     const rows=groupedRows().filter(x=>x.item.planned>0),cards=[...$('paceGrid').querySelectorAll('.pace-card')],now=nowMinutes();
     cards.forEach((card,index)=>{const row=rows[index];if(!row)return;const done=Boolean(row.item.completedAt),awaiting=row.remaining===0&&!done,late=!done&&!awaiting&&now>=row.deadline,active=!done&&!awaiting&&now>=row.start&&now<row.deadline,status=done?'完了':awaiting?'完了確認待ち':late?'締切超過':active?'処理時間中':'待機',tone=done?'var(--green)':awaiting?'var(--amber)':late?'var(--red)':active?'var(--amber)':'var(--blue)',bg=done?'#f0faf6':awaiting?'#fff9ed':late?'#fff1f3':active?'#fff9ed':'#f7f9fd';card.style.setProperty('--tone',tone);card.style.setProperty('--card-bg',bg);const label=card.querySelector('.status');if(label)label.textContent=status;const forecast=card.querySelector('.note b');if(forecast&&!late){const finish=waveFinishDisplay(row,now);forecast.textContent=finish.label?`${finish.label} ${finish.value}`:finish.value}});
   }
-  function opsShowBuild(){let badge=$('shipPaceBuild');if(!badge){badge=document.createElement('span');badge.id='shipPaceBuild';badge.style.cssText='font-size:10px;font-weight:900;color:#667085;white-space:nowrap';document.querySelector('header .ops-status')?.appendChild(badge)}if(badge)badge.textContent='v39'}
+  function opsShowBuild(){let badge=$('shipPaceBuild');if(!badge){badge=document.createElement('span');badge.id='shipPaceBuild';badge.style.cssText='font-size:10px;font-weight:900;color:#667085;white-space:nowrap';document.querySelector('header .ops-status')?.appendChild(badge)}if(badge)badge.textContent='v40'}
 
   const opsLegacyRender=render;
   render=function(){opsEnsureState();state.workers=shipPaceCurrentWorkerCount();opsLegacyRender();opsCorrectPaceCards();opsShowBuild();renderProgressTarget();renderDashboard();renderActiveWorkers();renderProgressStatus();renderHourlyProductivity();renderPerformance();renderWorkerMaster()};
@@ -217,24 +217,34 @@
     state.waves.forEach(w=>{const latest=state.progressSnapshots.filter(x=>x.waveId===w.id).sort((a,b)=>new Date(a.targetAt||a.at)-new Date(b.targetAt||b.at)).at(-1);if(latest)w.completed=Number(latest.completed)||0});
     return{checkpoint,waveValues,totalCompleted:total,targetAt,inputAt};
   }
-  function opsPromptReachedWave(waveValues,targetMinute){
-    const item=opsOrderedWaves().find(w=>(Number(waveValues[w.id])||0)>=Number(w.planned)&&!w.completedAt&&!state.completionDismissals.some(x=>x.waveId===w.id&&x.targetMinute===targetMinute));if(!item)return false;
-    opsCompletionCandidate={waveId:item.id,targetMinute};$('completionPrompt').textContent=`${item.area}は計画${item.planned}店舗に到達しました（実績${waveValues[item.id]}店舗）。この便の出荷作業は完了しましたか？`;$('completionModal').classList.add('open');return true;
+  function opsReachedCompletionCandidates(waveValues,targetMinute){
+    return opsOrderedWaves().filter(w=>(Number(waveValues[w.id])||0)>=Number(w.planned)&&!w.completedAt&&!state.completionDismissals.some(x=>x.waveId===w.id&&x.targetMinute===targetMinute)).map(w=>({waveId:w.id,targetMinute,completed:Number(waveValues[w.id])||0}));
+  }
+  function opsShowNextCompletionCandidate(){
+    while(opsCompletionQueue.length){
+      const candidate=opsCompletionQueue.shift(),item=state.waves.find(w=>w.id===candidate.waveId),dismissed=state.completionDismissals.some(x=>x.waveId===candidate.waveId&&x.targetMinute===candidate.targetMinute);
+      if(!item||item.completedAt||dismissed)continue;
+      opsCompletionCandidate=candidate;$('completionPrompt').textContent=`${item.area}は計画${item.planned}店舗に到達しました（実績${candidate.completed}店舗）。この便の出荷作業は完了しましたか？`;$('completionModal').classList.add('open');return true;
+    }
+    opsCompletionCandidate=null;$('completionModal').classList.remove('open');return false;
+  }
+  function opsPromptReachedWaves(waveValues,targetMinute){
+    opsCompletionQueue=opsReachedCompletionCandidates(waveValues,targetMinute);return opsShowNextCompletionCandidate();
   }
   async function opsSaveSnapshot(){
     const totalCompleted=Math.max(0,Math.round(Number($('quickCompleted').value)||0)),targetMinute=opsNextTarget();if(!Number.isFinite(targetMinute))return;
     const existed=Boolean(opsCheckpoint(targetMinute)),{waveValues}=recordGlobalCheckpoint({totalCompleted,targetMinute});
     await saveState(existed?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').innerHTML=`<strong>${clock(targetMinute)}時点の累計${totalCompleted.toLocaleString()}店舗を保存しました</strong><p>対象時刻と方面別進捗を自動判定し、計画差・生産性・必要ペースを再計算しました。</p>`;$('quickResult').scrollIntoView({behavior:'smooth',block:'center'});
-    opsPromptReachedWave(waveValues,targetMinute);
+    opsPromptReachedWaves(waveValues,targetMinute);
   }
   saveQuickProgress=opsSaveSnapshot;
   async function saveManualWaveProgress(){
     const id=$('quickWave').value,item=state.waves.find(x=>x.id===id),completed=Math.max(0,Math.round(Number($('manualWaveCompleted').value)||0)),targetMinute=Number($('progressTargetTime').value);if(!item||!Number.isFinite(targetMinute))return;
-    const existed=Boolean(opsCheckpoint(targetMinute)),{checkpoint}=recordProgressCheckpoint({id,completed,targetMinute,source:'manual_wave_correction'});await saveState(existed?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').innerHTML=`<strong>${clock(targetMinute)}時点の${escapeHtml(item.area)}を${completed.toLocaleString()}店舗へ修正しました</strong><p>関連する時間帯実績・人時・生産性を再計算しました。</p>`;opsPromptReachedWave(checkpoint.waveValues,targetMinute);
+    const existed=Boolean(opsCheckpoint(targetMinute)),{checkpoint}=recordProgressCheckpoint({id,completed,targetMinute,source:'manual_wave_correction'});await saveState(existed?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').innerHTML=`<strong>${clock(targetMinute)}時点の${escapeHtml(item.area)}を${completed.toLocaleString()}店舗へ修正しました</strong><p>関連する時間帯実績・人時・生産性を再計算しました。</p>`;opsPromptReachedWaves(checkpoint.waveValues,targetMinute);
   }
   window.saveManualWaveProgress=saveManualWaveProgress;
-  async function confirmReachedWave(){const candidate=opsCompletionCandidate;if(!candidate)return;$('completionModal').classList.remove('open');opsCompletionCandidate=null;await completeWave(candidate.waveId);$('quickResult').innerHTML=`<strong>${escapeHtml(state.waves.find(x=>x.id===candidate.waveId)?.area||'便')}を完了しました</strong><p>方面別 出荷締切へ反映し、次便の必要ペースと終了予測を再計算しました。</p>`}
-  async function dismissReachedWave(){const c=opsCompletionCandidate;if(c){const item=state.waves.find(x=>x.id===c.waveId),at=new Date().toISOString(),deferred={...c,at};if(item)item.completedAt=null;state.completionDismissals=state.completionDismissals.filter(x=>!(x.waveId===c.waveId&&x.targetMinute===c.targetMinute));state.completionDismissals.push(deferred);rememberDeferredCompletion(deferred)}$('completionModal').classList.remove('open');opsCompletionCandidate=null;await saveState('shipping_completion_deferred');$('quickResult').insertAdjacentHTML('beforeend','<p><strong>未完了で保存しました。</strong> 便は完了扱いにせず、進捗だけを保存しています。</p>')}
+  async function confirmReachedWave(){const candidate=opsCompletionCandidate;if(!candidate)return;opsCompletionCandidate=null;await completeWave(candidate.waveId);$('quickResult').innerHTML=`<strong>${escapeHtml(state.waves.find(x=>x.id===candidate.waveId)?.area||'便')}を完了しました</strong><p>方面別 出荷締切へ反映し、次便の必要ペースと終了予測を再計算しました。</p>`;opsShowNextCompletionCandidate()}
+  async function dismissReachedWave(){const c=opsCompletionCandidate;if(!c)return;opsCompletionCandidate=null;const item=state.waves.find(x=>x.id===c.waveId),at=new Date().toISOString(),deferred={...c,at};if(item)item.completedAt=null;state.completionDismissals=state.completionDismissals.filter(x=>!(x.waveId===c.waveId&&x.targetMinute===c.targetMinute));state.completionDismissals.push(deferred);rememberDeferredCompletion(deferred);await saveState('shipping_completion_deferred');$('quickResult').insertAdjacentHTML('beforeend',`<p><strong>${escapeHtml(item?.area||'便')}は未完了で保存しました。</strong> 便は完了扱いにせず、進捗だけを保存しています。</p>`);opsShowNextCompletionCandidate()}
   window.confirmReachedWave=confirmReachedWave;window.dismissReachedWave=dismissReachedWave;
 
   saveStartSettings=async function(){const next=operationStart.value||'09:30';state.operationStart=next;state.effectiveTime=next;opsRebuildStaffingTimeline();await saveState('shipping_start_change');workerMessage.textContent=`今日の計画開始を${next}に設定しました。作業者の人時は実際の参加時刻から計算します。`};
