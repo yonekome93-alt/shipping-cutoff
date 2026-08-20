@@ -396,7 +396,8 @@
       if(urgent&&next.remaining>0){nextAction.innerHTML=`<small>NEXT ACTION・締切超過</small><h3>${escapeHtml(next.item.area)}は締切を超過しています</h3><p>残り <b>${next.remaining.toLocaleString()}店舗</b>です。残作業を確認してください。</p>`;return}
       if(next.remaining<=0){nextAction.innerHTML=`<small>NEXT ACTION・完了確認</small><h3>${escapeHtml(next.item.area)}は完了確認待ちです</h3><p>計画店舗数へ到達しています。実際の作業完了を確認してください。</p>`;return}
       const totalStores=state.waves.reduce((s,x)=>s+x.planned,0),unitsPerStore=totalStores?(Number(state.totalUnits)||0)/totalStores:0;
-      nextAction.innerHTML=`<small>NEXT ACTION・次に処理する便</small><h3>${escapeHtml(next.item.area)}を${next.item.cutoff}までに残り${next.remaining.toLocaleString()}店舗</h3><p>${clock(next.start)}からの枠で、現在時刻から必要なチーム速度は <b>${rate}</b> です。全体は <b>${(Number(state.totalUnits)||0).toLocaleString()}ユニット</b>${state.totalUnits?`（1店舗平均 ${unitsPerStore.toFixed(1)}ユニット）`:''}です。</p>`;
+      const unitText=Number(state.totalUnits)>0?`全体は <b>${Number(state.totalUnits).toLocaleString()}ユニット</b>（1店舗平均 ${unitsPerStore.toFixed(1)}ユニット）です。`:'';
+      nextAction.innerHTML=`<small>NEXT ACTION・次に処理する便</small><h3>${escapeHtml(next.item.area)}を${next.item.cutoff}までに残り${next.remaining.toLocaleString()}店舗</h3><p>${clock(next.start)}からの枠で、現在時刻から必要なチーム速度は <b>${rate}</b> です。${unitText}</p>`;
     }
     function renderWorker(pending,now){
       const result=totalOperationalRequirement(groupedRows(),now,effectiveCurrentWorkers(now));
@@ -780,8 +781,8 @@
     sharedPin.addEventListener('keydown',event=>{if(event.key==='Enter')unlockSharedPin()});
     document.addEventListener('input',event=>{if(event.target.closest('#app')&&event.target.matches('input,textarea'))formDirty=true});
     setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState(sharedPinValue,{background:true})},15000);
-    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=41').catch(()=>{}));
+    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=42').catch(()=>{}));
   </script>
-  <script src="./ship-pace-ops.js?v=41"></script>
+  <script src="./ship-pace-ops.js?v=42"></script>
 </body>
 </html>
