@@ -304,7 +304,7 @@
     }
     function forecastFor(row,now=nowMinutes()){
       if(!row)return'-';
-      if(row.remaining<=0)return row.item.completedAt?new Date(row.item.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'完了';
+      if(row.remaining<=0)return row.item.completedAt?new Date(row.item.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'完了確認待ち';
       const rate=actualRateFor(row.item.id);if(!rate)return'実績待ち';const finish=now+Math.ceil(row.remaining/rate*60);return finish>=1440?'翌日 '+clock(finish%1440):clock(finish)
     }
     function requiredWorkersFor(row,now=nowMinutes()){
@@ -444,7 +444,7 @@
       collect();const names=state.activeProductivitySession.names;state.productivitySessions=[...(state.productivitySessions||[]),productivityRecord(state.activeProductivitySession)].slice(-2000);state.activeProductivitySession=null;await saveState('shipping_productivity_end');productivityMessage.textContent=`${names.join('・')}さんの担当記録を終了しました。`;
     }
     function renderCards(rows,now){
-      paceGrid.innerHTML=rows.filter(x=>x.item.planned>0).map(x=>{const done=x.remaining===0,late=!done&&now>=x.deadline,active=!done&&now>=x.start&&now<x.deadline,tone=done?'var(--green)':late?'var(--red)':active?'var(--amber)':'var(--blue)',bg=done?'#f0faf6':late?'#fff1f3':active?'#fff9ed':'#f7f9fd',status=done?'完了':late?'締切超過':active?'処理時間中':'待機',person=Math.ceil(x.rate/state.workers),needed=requiredWorkersFor(x,now);return `<article class="pace-card" style="--tone:${tone};--card-bg:${bg}"><header><h3>${escapeHtml(x.item.area)}</h3><b class="status">${status}</b></header><p class="window">着手 ${clock(x.start)} → 締切 ${x.item.cutoff}（休憩除外の実働${x.work}分）</p><div class="pace-metrics"><div><small>残り店舗</small><strong>${x.remaining.toLocaleString()}店舗</strong></div><div><small>チーム必要速度</small><strong>${x.rate.toLocaleString()}店舗/時</strong></div><div><small>15分目標</small><strong>${x.per15.toLocaleString()}店舗</strong></div></div><p class="note"><b>終了予測 ${forecastFor(x,now)}</b>／必要人数 ${needed>=99?'算出不可':needed+'名'}<br><b>${state.effectiveTime}から${state.workers}名：</b>1人あたり <b>${person.toLocaleString()}店舗/時</b>・<b>${Math.ceil(person/4).toLocaleString()}店舗/15分</b>${x.groupCount>1?`<br>${x.item.cutoff}締切の${x.groupCount}便合計で計算`:''}</p></article>`}).join('')||'<p>計画店舗数を入力すると表示されます。</p>';
+      paceGrid.innerHTML=rows.filter(x=>x.item.planned>0).map(x=>{const done=Boolean(x.item.completedAt),reached=x.remaining===0,awaiting=reached&&!done,late=!done&&!awaiting&&now>=x.deadline,active=!done&&!awaiting&&now>=x.start&&now<x.deadline,tone=done?'var(--green)':awaiting?'var(--amber)':late?'var(--red)':active?'var(--amber)':'var(--blue)',bg=done?'#f0faf6':awaiting?'#fff9ed':late?'#fff1f3':active?'#fff9ed':'#f7f9fd',status=done?'完了':awaiting?'完了確認待ち':late?'締切超過':active?'処理時間中':'待機',person=Math.ceil(x.rate/state.workers),needed=requiredWorkersFor(x,now);return `<article class="pace-card" style="--tone:${tone};--card-bg:${bg}"><header><h3>${escapeHtml(x.item.area)}</h3><b class="status">${status}</b></header><p class="window">着手 ${clock(x.start)} → 締切 ${x.item.cutoff}（休憩除外の実働${x.work}分）</p><div class="pace-metrics"><div><small>残り店舗</small><strong>${x.remaining.toLocaleString()}店舗</strong></div><div><small>チーム必要速度</small><strong>${x.rate.toLocaleString()}店舗/時</strong></div><div><small>15分目標</small><strong>${x.per15.toLocaleString()}店舗</strong></div></div><p class="note"><b>終了予測 ${forecastFor(x,now)}</b>／必要人数 ${needed>=99?'算出不可':needed+'名'}<br><b>${state.effectiveTime}から${state.workers}名：</b>1人あたり <b>${person.toLocaleString()}店舗/時</b>・<b>${Math.ceil(person/4).toLocaleString()}店舗/15分</b>${x.groupCount>1?`<br>${x.item.cutoff}締切の${x.groupCount}便合計で計算`:''}</p></article>`}).join('')||'<p>計画店舗数を入力すると表示されます。</p>';
     }
     function toggleMobileCard(button){
       const row=button.closest('tr');if(!row)return;
@@ -738,8 +738,8 @@
     sharedPin.addEventListener('keydown',event=>{if(event.key==='Enter')unlockSharedPin()});
     document.addEventListener('input',event=>{if(event.target.closest('#app')&&event.target.matches('input,textarea'))formDirty=true});
     setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState(sharedPinValue,{background:true})},15000);
-    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=34').catch(()=>{}));
+    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=35').catch(()=>{}));
   </script>
-  <script src="./ship-pace-ops.js?v=34"></script>
+  <script src="./ship-pace-ops.js?v=35"></script>
 </body>
 </html>
