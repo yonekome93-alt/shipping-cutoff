@@ -191,7 +191,7 @@
     const rows=groupedRows().filter(x=>x.item.planned>0),cards=[...$('paceGrid').querySelectorAll('.pace-card')],now=nowMinutes();
     cards.forEach((card,index)=>{const row=rows[index];if(!row)return;const done=Boolean(row.item.completedAt),awaiting=row.remaining===0&&!done,late=!done&&!awaiting&&now>=row.deadline,active=!done&&!awaiting&&now>=row.start&&now<row.deadline,status=done?'完了':awaiting?'完了確認待ち':late?'締切超過':active?'処理時間中':'待機',tone=done?'var(--green)':awaiting?'var(--amber)':late?'var(--red)':active?'var(--amber)':'var(--blue)',bg=done?'#f0faf6':awaiting?'#fff9ed':late?'#fff1f3':active?'#fff9ed':'#f7f9fd';card.style.setProperty('--tone',tone);card.style.setProperty('--card-bg',bg);const label=card.querySelector('.status');if(label)label.textContent=status;const forecast=card.querySelector('.note b');if(forecast&&!late){const finish=waveFinishDisplay(row,now);forecast.textContent=finish.label?`${finish.label} ${finish.value}`:finish.value}});
   }
-  function opsShowBuild(){let badge=$('shipPaceBuild');if(!badge){badge=document.createElement('span');badge.id='shipPaceBuild';badge.style.cssText='font-size:10px;font-weight:900;color:#667085;white-space:nowrap';document.querySelector('header .ops-status')?.appendChild(badge)}if(badge)badge.textContent='v40'}
+  function opsShowBuild(){let badge=$('shipPaceBuild');if(!badge){badge=document.createElement('span');badge.id='shipPaceBuild';badge.style.cssText='font-size:10px;font-weight:900;color:#667085;white-space:nowrap';document.querySelector('header .ops-status')?.appendChild(badge)}if(badge)badge.textContent='v41'}
 
   const opsLegacyRender=render;
   render=function(){opsEnsureState();state.workers=shipPaceCurrentWorkerCount();opsLegacyRender();opsCorrectPaceCards();opsShowBuild();renderProgressTarget();renderDashboard();renderActiveWorkers();renderProgressStatus();renderHourlyProductivity();renderPerformance();renderWorkerMaster()};
@@ -231,6 +231,13 @@
   function opsPromptReachedWaves(waveValues,targetMinute){
     opsCompletionQueue=opsReachedCompletionCandidates(waveValues,targetMinute);return opsShowNextCompletionCandidate();
   }
+  function opsRestoreCompletionCandidates(){
+    if(opsCompletionCandidate||opsCompletionQueue.length)return false;
+    const latest=[...state.progressCheckpoints].filter(x=>x&&Number.isFinite(Number(x.targetMinute))&&x.waveValues).sort((a,b)=>Number(a.targetMinute)-Number(b.targetMinute)).at(-1);
+    if(!latest)return false;
+    opsCompletionQueue=opsReachedCompletionCandidates(latest.waveValues,Number(latest.targetMinute));
+    return opsShowNextCompletionCandidate();
+  }
   async function opsSaveSnapshot(){
     const totalCompleted=Math.max(0,Math.round(Number($('quickCompleted').value)||0)),targetMinute=opsNextTarget();if(!Number.isFinite(targetMinute))return;
     const existed=Boolean(opsCheckpoint(targetMinute)),{waveValues}=recordGlobalCheckpoint({totalCompleted,targetMinute});
@@ -262,5 +269,7 @@
     const reminder=$('progressReminderPanel'),progress=$('progressPanel'),nextPanel=$('nextActionPanel'),pace=$('paceGrid')?.closest('.panel'),hourly=$('hourlyProductivity')?.closest('.panel'),ranking=$('personalRanking')?.closest('.panel'),settings=$('operationSettingsPanel');
     if(reminder&&progress)reminder.after(progress);if(progress&&nextPanel)progress.after(nextPanel);if(nextPanel&&pace)nextPanel.after(pace);if(pace&&hourly)pace.after(hourly);if(ranking&&settings)ranking.after(settings);
   }
+  const opsLegacyRenderWithCompletionRestore=render;
+  render=function(){opsLegacyRenderWithCompletionRestore();opsRestoreCompletionCandidates()};
   opsEnsureState();opsFoldSecondaryPanels();opsOrganizeMainView();render();
 })();
