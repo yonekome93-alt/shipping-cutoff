@@ -223,6 +223,7 @@
     const DEVICE_ID_KEY='shipping-cutoff-device-id';
     const VOICE_KEY='shipping-cutoff-voice';
     const NOTIFICATION_KEY='shipping-cutoff-notification';
+    const COMPLETION_GUARD_KEY='shipping-cutoff-deferred-completions-v1';
     const SB_URL='https://ygbxyejhfeieqhgdymys.supabase.co';
     const SB_KEY='sb_publishable_kQvjwG8nKu1YGM_3qlZ-Vg_ok3jlvIW';
     const SB_HEADERS={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
@@ -244,6 +245,10 @@
     ];
     const DEFAULT_BREAKS=[[630,645],[720,780],[930,945]];
     const dateKey=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+    function localCompletionGuards(){try{return (JSON.parse(localStorage.getItem(COMPLETION_GUARD_KEY)||'[]')||[]).filter(x=>x&&x.date===dateKey()&&x.waveId)}catch{return[]}}
+    function rememberDeferredCompletion(value){const rows=localCompletionGuards().filter(x=>x.waveId!==value.waveId);rows.push({date:dateKey(),waveId:value.waveId,targetMinute:value.targetMinute,at:value.at||new Date().toISOString()});localStorage.setItem(COMPLETION_GUARD_KEY,JSON.stringify(rows))}
+    function forgetDeferredCompletion(waveId){localStorage.setItem(COMPLETION_GUARD_KEY,JSON.stringify(localCompletionGuards().filter(x=>x.waveId!==waveId)))}
+    function clearDeferredCompletionGuards(){localStorage.removeItem(COMPLETION_GUARD_KEY)}
     const offsetDateKey=days=>{const d=new Date();d.setDate(d.getDate()+days);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
     const timestampDateKey=value=>{const d=new Date(value);return Number.isNaN(d.getTime())?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
     const hasTodayActivity=value=>Array.isArray(value?.waves)&&value.waves.some(x=>timestampDateKey(x.completedAt)===dateKey())||Array.isArray(value?.progressSnapshots)&&value.progressSnapshots.some(x=>timestampDateKey(x.at)===dateKey())||Array.isArray(value?.auditLog)&&value.auditLog.some(x=>timestampDateKey(x.at)===dateKey());
@@ -266,7 +271,9 @@
       return {date:dateKey(),operationStart:nextOperationStart,totalUnits:newDay?futureUnits:(Number(saved.totalUnits)||legacyUnits),productivityMode:Boolean(saved.productivityMode),productivitySessions:Array.isArray(saved.productivitySessions)?saved.productivitySessions.slice(-2000):[],activeProductivitySession:newDay?null:(saved.activeProductivitySession||null),startWorkers,workers:newDay?0:(Number(saved.workers)||0),effectiveTime:newDay?nextOperationStart:(saved.effectiveTime||nextOperationStart),onePersonRate:Math.max(1,Number(saved.onePersonRate)||100),breaks:savedBreaks.length?savedBreaks:DEFAULT_BREAKS.map(x=>[...x]),workerChanges:newDay?[]:(Array.isArray(saved.workerChanges)?saved.workerChanges:[]),progressSnapshots:newDay?[]:(Array.isArray(saved.progressSnapshots)?saved.progressSnapshots:[]),workerMaster:Array.isArray(saved.workerMaster)?saved.workerMaster:[],workerSessions:newDay?[]:(Array.isArray(saved.workerSessions)?saved.workerSessions:[]),staffingTimeline:newDay?[]:(Array.isArray(saved.staffingTimeline)?saved.staffingTimeline:[]),progressCheckpoints:newDay?[]:(Array.isArray(saved.progressCheckpoints)?saved.progressCheckpoints:[]),completionDismissals:newDay?[]:(Array.isArray(saved.completionDismissals)?saved.completionDismissals:[]),planHistory:planHistory.slice(0,60),futurePlans,reports:Array.isArray(saved.reports)?saved.reports:[],auditLog:Array.isArray(saved.auditLog)?saved.auditLog:[],undoStack:Array.isArray(saved.undoStack)?saved.undoStack:[],syncRevision:saved.syncRevision||'',syncDevice:saved.syncDevice||'',waves:defaults.map(x=>{const prev=sourceWaves.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
     }
     function enforceDeferredCompletions(target){
-      if(!target||!Array.isArray(target.waves)||!Array.isArray(target.completionDismissals))return target;
+      if(!target||!Array.isArray(target.waves))return target;
+      target.completionDismissals=Array.isArray(target.completionDismissals)?target.completionDismissals:[];
+      for(const local of localCompletionGuards())if(!target.completionDismissals.some(x=>x.waveId===local.waveId))target.completionDismissals.push(local);
       for(const dismissal of target.completionDismissals){
         const item=target.waves.find(x=>x.id===dismissal.waveId);
         if(!item||!item.completedAt)continue;
@@ -731,8 +738,8 @@
     sharedPin.addEventListener('keydown',event=>{if(event.key==='Enter')unlockSharedPin()});
     document.addEventListener('input',event=>{if(event.target.closest('#app')&&event.target.matches('input,textarea'))formDirty=true});
     setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState(sharedPinValue,{background:true})},15000);
-    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=33').catch(()=>{}));
+    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=34').catch(()=>{}));
   </script>
-  <script src="./ship-pace-ops.js?v=33"></script>
+  <script src="./ship-pace-ops.js?v=34"></script>
 </body>
 </html>
