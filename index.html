@@ -159,9 +159,9 @@
       <div id="progressTimingMessage" class="late-note"></div>
       <div id="quickResult" class="worker-result"></div>
       <details id="manualProgressDetails" class="details-panel" style="margin-top:14px">
-        <summary>過去時刻・便を指定して修正</summary>
+        <summary>例外修正：過去時刻・便を指定</summary>
         <div class="details-inner">
-          <p style="color:var(--muted);margin-top:0">入力漏れの後入力や、特定便だけを修正するときに使用します。</p>
+          <p style="color:var(--muted);margin-top:0">入力漏れの後入力や、自動配分された特定の時刻・便だけを修正するときに使用します。通常の進捗入力では使用しません。</p>
           <div class="quick-grid">
             <label>対象時刻<select id="progressTargetTime"></select></label>
             <label>方面／便<select id="quickWave"></select></label>
@@ -788,6 +788,6 @@
     setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState(sharedPinValue,{background:true})},15000);
     if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=42').catch(()=>{}));
   </script>
-    <script src="./ship-pace-ops.js?v=45"></script>
+    <script src="./ship-pace-ops.js?v=46"></script>
 </body>
 </html>
