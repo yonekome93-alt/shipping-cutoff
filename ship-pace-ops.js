@@ -191,30 +191,32 @@
     const rows=groupedRows().filter(x=>x.item.planned>0),cards=[...$('paceGrid').querySelectorAll('.pace-card')],now=nowMinutes();
     cards.forEach((card,index)=>{const row=rows[index];if(!row)return;const done=Boolean(row.item.completedAt),awaiting=row.remaining===0&&!done,late=!done&&!awaiting&&now>=row.deadline,active=!done&&!awaiting&&now>=row.start&&now<row.deadline,status=done?'完了':awaiting?'完了確認待ち':late?'締切超過':active?'処理時間中':'待機',tone=done?'var(--green)':awaiting?'var(--amber)':late?'var(--red)':active?'var(--amber)':'var(--blue)',bg=done?'#f0faf6':awaiting?'#fff9ed':late?'#fff1f3':active?'#fff9ed':'#f7f9fd';card.style.setProperty('--tone',tone);card.style.setProperty('--card-bg',bg);const label=card.querySelector('.status');if(label)label.textContent=status;const forecast=card.querySelector('.note b');if(forecast&&!late){const finish=waveFinishDisplay(row,now);forecast.textContent=finish.label?`${finish.label} ${finish.value}`:finish.value}});
   }
-  function opsShowBuild(){let badge=$('shipPaceBuild');if(!badge){badge=document.createElement('span');badge.id='shipPaceBuild';badge.style.cssText='font-size:10px;font-weight:900;color:#667085;white-space:nowrap';document.querySelector('header .ops-status')?.appendChild(badge)}if(badge)badge.textContent='v43'}
+  function opsShowBuild(){let badge=$('shipPaceBuild');if(!badge){badge=document.createElement('span');badge.id='shipPaceBuild';badge.style.cssText='font-size:10px;font-weight:900;color:#667085;white-space:nowrap';document.querySelector('header .ops-status')?.appendChild(badge)}if(badge)badge.textContent='v44'}
 
+  function opsCompletedValue(wave,value){const completed=Math.max(0,Number(value)||0);return wave?.completedAt?Math.max(Math.max(0,Number(wave.planned)||0),completed):completed}
+  function opsNormalizeCompletedWaves(){state.waves.forEach(w=>{w.completed=opsCompletedValue(w,w.completed)})}
   const opsLegacyRender=render;
-  render=function(){opsEnsureState();state.workers=shipPaceCurrentWorkerCount();opsLegacyRender();opsCorrectPaceCards();opsShowBuild();renderProgressTarget();renderDashboard();renderActiveWorkers();renderProgressStatus();renderHourlyProductivity();renderPerformance();renderWorkerMaster()};
+  render=function(){opsEnsureState();opsNormalizeCompletedWaves();state.workers=shipPaceCurrentWorkerCount();opsLegacyRender();opsCorrectPaceCards();opsShowBuild();renderProgressTarget();renderDashboard();renderActiveWorkers();renderProgressStatus();renderHourlyProductivity();renderPerformance();renderWorkerMaster()};
 
   function recordProgressCheckpoint({id,completed,targetMinute,inputAt=new Date().toISOString(),source='manual_snapshot'}){
-    const targetAt=opsTargetIso(targetMinute);let legacy=state.progressSnapshots.find(x=>x.waveId===id&&Number(x.targetMinute)===targetMinute);if(legacy)Object.assign(legacy,{completed,at:targetAt,targetAt,inputAt,source});else state.progressSnapshots.push({id:opsUuid(),waveId:id,completed,interval:0,at:targetAt,targetAt,inputAt,targetMinute,source});
-    let checkpoint=opsCheckpoint(targetMinute);const priorValues=checkpoint?.waveValues||{};const waveValues=Object.fromEntries(state.waves.map(w=>{if(w.id===id)return[w.id,completed];if(priorValues[w.id]!==undefined)return[w.id,Number(priorValues[w.id])||0];const prior=state.progressSnapshots.filter(x=>x.waveId===w.id&&Number(x.targetMinute)<=targetMinute).sort((a,b)=>Number(a.targetMinute)-Number(b.targetMinute)).at(-1);return[w.id,Number(prior?.completed)||0]})),totalCompleted=Object.values(waveValues).reduce((s,value)=>s+(Number(value)||0),0);if(checkpoint)Object.assign(checkpoint,{inputAt,totalCompleted,waveValues,updatedAt:inputAt});else state.progressCheckpoints.push({id:opsUuid(),targetMinute,targetAt,inputAt,totalCompleted,waveValues,createdAt:inputAt});state.progressCheckpoints.sort((a,b)=>a.targetMinute-b.targetMinute);state.progressSnapshots=state.progressSnapshots.slice(-1000);
-    state.waves.forEach(w=>{const latest=state.progressSnapshots.filter(x=>x.waveId===w.id).sort((a,b)=>new Date(a.targetAt||a.at)-new Date(b.targetAt||b.at)).at(-1);if(latest)w.completed=Number(latest.completed)||0});return{checkpoint,totalCompleted,targetAt,inputAt};
+    const item=state.waves.find(w=>w.id===id),safeCompleted=opsCompletedValue(item,completed),targetAt=opsTargetIso(targetMinute);let legacy=state.progressSnapshots.find(x=>x.waveId===id&&Number(x.targetMinute)===targetMinute);if(legacy)Object.assign(legacy,{completed:safeCompleted,at:targetAt,targetAt,inputAt,source});else state.progressSnapshots.push({id:opsUuid(),waveId:id,completed:safeCompleted,interval:0,at:targetAt,targetAt,inputAt,targetMinute,source});
+    let checkpoint=opsCheckpoint(targetMinute);const priorValues=checkpoint?.waveValues||{};const waveValues=Object.fromEntries(state.waves.map(w=>{let value;if(w.id===id)value=safeCompleted;else if(priorValues[w.id]!==undefined)value=Number(priorValues[w.id])||0;else{const prior=state.progressSnapshots.filter(x=>x.waveId===w.id&&Number(x.targetMinute)<=targetMinute).sort((a,b)=>Number(a.targetMinute)-Number(b.targetMinute)).at(-1);value=Number(prior?.completed)||0}return[w.id,opsCompletedValue(w,value)]})),totalCompleted=Object.values(waveValues).reduce((s,value)=>s+(Number(value)||0),0);if(checkpoint)Object.assign(checkpoint,{inputAt,totalCompleted,waveValues,updatedAt:inputAt});else state.progressCheckpoints.push({id:opsUuid(),targetMinute,targetAt,inputAt,totalCompleted,waveValues,createdAt:inputAt});state.progressCheckpoints.sort((a,b)=>a.targetMinute-b.targetMinute);state.progressSnapshots=state.progressSnapshots.slice(-1000);
+    state.waves.forEach(w=>{const latest=state.progressSnapshots.filter(x=>x.waveId===w.id).sort((a,b)=>new Date(a.targetAt||a.at)-new Date(b.targetAt||b.at)).at(-1);if(latest)w.completed=opsCompletedValue(w,latest.completed)});return{checkpoint,totalCompleted,targetAt,inputAt};
   }
   window.shipPaceRecordProgressCheckpoint=recordProgressCheckpoint;
   function opsOrderedWaves(){return state.waves.map((wave,index)=>({wave,index})).filter(x=>x.wave.planned>0).sort((a,b)=>minutes(a.wave.cutoff)-minutes(b.wave.cutoff)||a.index-b.index).map(x=>x.wave)}
   function opsAllocateGlobalTotal(total){
-    const ordered=opsOrderedWaves(),values=Object.fromEntries(state.waves.map(w=>[w.id,0]));let remaining=Math.max(0,Math.round(Number(total)||0));
-    ordered.forEach(w=>{const value=Math.min(remaining,Math.max(0,Number(w.planned)||0));values[w.id]=value;remaining-=value});
-    if(remaining>0&&ordered.length)values[ordered.at(-1).id]+=remaining;
+    const ordered=opsOrderedWaves(),values=Object.fromEntries(state.waves.map(w=>[w.id,0])),completedFloor=ordered.filter(w=>w.completedAt).reduce((sum,w)=>sum+Math.max(0,Number(w.planned)||0),0);let remaining=Math.max(0,Math.round(Number(total)||0)-completedFloor);
+    ordered.forEach(w=>{if(w.completedAt){values[w.id]=Math.max(0,Number(w.planned)||0);return}const value=Math.min(remaining,Math.max(0,Number(w.planned)||0));values[w.id]=value;remaining-=value});
+    if(remaining>0){const lastPending=[...ordered].reverse().find(w=>!w.completedAt)||ordered.at(-1);if(lastPending)values[lastPending.id]+=remaining}
     return values;
   }
   function recordGlobalCheckpoint({totalCompleted,targetMinute,inputAt=new Date().toISOString(),source='global_snapshot'}){
-    const total=Math.max(0,Math.round(Number(totalCompleted)||0)),waveValues=opsAllocateGlobalTotal(total),targetAt=opsTargetIso(targetMinute);let checkpoint=opsCheckpoint(targetMinute);
+    const requestedTotal=Math.max(0,Math.round(Number(totalCompleted)||0)),waveValues=opsAllocateGlobalTotal(requestedTotal),total=Object.values(waveValues).reduce((sum,value)=>sum+(Number(value)||0),0),targetAt=opsTargetIso(targetMinute);let checkpoint=opsCheckpoint(targetMinute);
     state.waves.forEach(w=>{const completed=Number(waveValues[w.id])||0;let snapshot=state.progressSnapshots.find(x=>x.waveId===w.id&&Number(x.targetMinute)===targetMinute);if(snapshot)Object.assign(snapshot,{completed,at:targetAt,targetAt,inputAt,source});else state.progressSnapshots.push({id:opsUuid(),waveId:w.id,completed,interval:0,at:targetAt,targetAt,inputAt,targetMinute,source})});
     if(checkpoint)Object.assign(checkpoint,{inputAt,totalCompleted:total,waveValues,updatedAt:inputAt,source});else{checkpoint={id:opsUuid(),targetMinute,targetAt,inputAt,totalCompleted:total,waveValues,createdAt:inputAt,source};state.progressCheckpoints.push(checkpoint)}
     state.progressCheckpoints.sort((a,b)=>a.targetMinute-b.targetMinute);state.progressSnapshots=state.progressSnapshots.slice(-1000);
-    state.waves.forEach(w=>{const latest=state.progressSnapshots.filter(x=>x.waveId===w.id).sort((a,b)=>new Date(a.targetAt||a.at)-new Date(b.targetAt||b.at)).at(-1);if(latest)w.completed=Number(latest.completed)||0});
+    state.waves.forEach(w=>{const latest=state.progressSnapshots.filter(x=>x.waveId===w.id).sort((a,b)=>new Date(a.targetAt||a.at)-new Date(b.targetAt||b.at)).at(-1);if(latest)w.completed=opsCompletedValue(w,latest.completed)});
     return{checkpoint,waveValues,totalCompleted:total,targetAt,inputAt};
   }
   function opsReachedCompletionCandidates(waveValues,targetMinute){
@@ -239,8 +241,8 @@
     return opsShowNextCompletionCandidate();
   }
   async function opsSaveSnapshot(){
-    const totalCompleted=Math.max(0,Math.round(Number($('quickCompleted').value)||0)),targetMinute=opsNextTarget();if(!Number.isFinite(targetMinute))return;
-    const existed=Boolean(opsCheckpoint(targetMinute)),{waveValues}=recordGlobalCheckpoint({totalCompleted,targetMinute});
+    const requestedTotal=Math.max(0,Math.round(Number($('quickCompleted').value)||0)),targetMinute=opsNextTarget();if(!Number.isFinite(targetMinute))return;
+    const existed=Boolean(opsCheckpoint(targetMinute)),{totalCompleted,waveValues}=recordGlobalCheckpoint({totalCompleted:requestedTotal,targetMinute});
     await saveState(existed?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').innerHTML=`<strong>${clock(targetMinute)}時点の累計${totalCompleted.toLocaleString()}店舗を保存しました</strong><p>対象時刻と方面別進捗を自動判定し、計画差・生産性・必要ペースを再計算しました。</p>`;$('quickResult').scrollIntoView({behavior:'smooth',block:'center'});
     opsPromptReachedWaves(waveValues,targetMinute);
   }
