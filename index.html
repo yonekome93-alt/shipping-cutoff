@@ -738,8 +738,8 @@
     sharedPin.addEventListener('keydown',event=>{if(event.key==='Enter')unlockSharedPin()});
     document.addEventListener('input',event=>{if(event.target.closest('#app')&&event.target.matches('input,textarea'))formDirty=true});
     setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState(sharedPinValue,{background:true})},15000);
-    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=35').catch(()=>{}));
+    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=36').catch(()=>{}));
   </script>
-  <script src="./ship-pace-ops.js?v=35"></script>
+  <script src="./ship-pace-ops.js?v=36"></script>
 </body>
 </html>
