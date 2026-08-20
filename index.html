@@ -322,6 +322,19 @@
     function requiredWorkersFor(row,now=nowMinutes()){
       if(row.remaining<=0)return 0;const work=workingMinutes(Math.max(now,row.start),row.deadline);if(work<=0)return 99;return Math.max(1,Math.ceil((row.groupRemaining/(work/60))/state.onePersonRate))
     }
+    function effectiveCurrentWorkers(at=nowMinutes()){
+      return typeof shipPaceCurrentWorkerCount==='function'?shipPaceCurrentWorkerCount(at):Math.max(0,Number(state.workers)||0)
+    }
+    function totalOperationalRequirement(rows=groupedRows(),now=nowMinutes(),currentWorkers=effectiveCurrentWorkers(now)){
+      const pending=rows.filter(x=>x.item.planned>0&&!x.item.completedAt&&x.remaining>0),remaining=pending.reduce((sum,x)=>sum+x.remaining,0),current=Math.max(0,Number(currentWorkers)||0);
+      if(remaining<=0)return{status:'complete',remaining:0,deadline:null,effectiveMinutes:0,requiredRate:0,requiredWorkers:0,currentWorkers:current,gap:-current,action:'本日の作業は完了',detail:`必要人数 0名｜${current?'増員不要':'増員不要'}`};
+      const deadline=Math.max(...pending.map(x=>x.deadline)),start=Math.max(now,minutes(state.effectiveTime),minutes(state.operationStart||'09:30'));
+      if(now>=deadline)return{status:'overdue',remaining,deadline,effectiveMinutes:0,requiredRate:null,requiredWorkers:null,currentWorkers:current,gap:null,action:'締切超過',detail:`最終締切 ${clock(deadline)}｜残り ${remaining.toLocaleString()}店舗｜必要人数 算出対象外`};
+      const effectiveMinutes=workingMinutes(start,deadline);
+      if(effectiveMinutes<=0)return{status:'overdue',remaining,deadline,effectiveMinutes:0,requiredRate:null,requiredWorkers:null,currentWorkers:current,gap:null,action:'締切超過',detail:`最終締切 ${clock(deadline)}｜残り ${remaining.toLocaleString()}店舗｜必要人数 算出対象外`};
+      const requiredRate=Math.ceil(remaining/(effectiveMinutes/60)),requiredWorkers=Math.max(1,Math.ceil(requiredRate/Math.max(1,Number(state.onePersonRate)||1))),gap=requiredWorkers-current;
+      return{status:'active',remaining,deadline,effectiveMinutes,requiredRate,requiredWorkers,currentWorkers:current,gap,action:gap>0?`${gap}名増員推奨`:gap<0?`${Math.abs(gap)}名余力あり`:'増員不要',detail:`必要人数 ${requiredWorkers}名｜現在 ${current}名`};
+    }
     function finishAtRate(start,quantity,rate){
       if(!rate||rate<=0)return null;
       let cursor=start,needed=Math.ceil(quantity/rate*60),guard=0;
@@ -377,8 +390,15 @@
       nextAction.innerHTML=`<small>NEXT ACTION・次に処理する便</small><h3>${escapeHtml(next.item.area)}を${next.item.cutoff}までに残り${next.remaining.toLocaleString()}店舗</h3><p>${clock(next.start)}からの枠で、現在時刻から必要なチーム速度は <b>${rate}</b> です。全体は <b>${(Number(state.totalUnits)||0).toLocaleString()}ユニット</b>${state.totalUnits?`（1店舗平均 ${unitsPerStore.toFixed(1)}ユニット）`:''}です。</p>`;
     }
     function renderWorker(pending,now){
-      const total=pending.reduce((s,x)=>s+x.remaining,0),final=pending.length?Math.max(...pending.map(x=>x.deadline)):1020,start=Math.max(now,minutes(state.effectiveTime),minutes(state.operationStart||'09:30')),work=Math.max(1,workingMinutes(start,final)),team=Math.ceil(total/(work/60)),safeWorkers=Math.max(1,Number(state.workers)||0),person=Math.ceil(team/safeWorkers),per15=Math.ceil(person/4),suggested=Math.max(1,Math.ceil(team/state.onePersonRate)),gap=suggested-(Number(state.workers)||0);
-      workerResult.innerHTML=`<strong>${state.effectiveTime}から${state.workers}名：1人あたり ${person.toLocaleString()}店舗/時・${per15.toLocaleString()}店舗/15分</strong><p>残り${total.toLocaleString()}店舗／最終締切${clock(final)}／実働${work}分（休憩除外）／チーム必要速度${team.toLocaleString()}店舗/時</p><p><b>自動提案：${suggested}名</b>（1人${state.onePersonRate.toLocaleString()}店舗/時基準）${gap>0?`・あと${gap}名必要`:gap<0?`・${Math.abs(gap)}名の余裕`:'・現在人数で対応可能'}</p>`;
+      const result=totalOperationalRequirement(groupedRows(),now,effectiveCurrentWorkers(now));
+      if(result.status==='complete'){
+        workerResult.innerHTML=`<strong>本日の作業は完了</strong><p>残り0店舗／必要人数 0名</p><p><b>増員不要</b></p>`;return;
+      }
+      if(result.status==='overdue'){
+        workerResult.innerHTML=`<strong class="status" style="color:var(--red)">締切超過</strong><p>最終締切${clock(result.deadline)}／残り${result.remaining.toLocaleString()}店舗</p><p><b>必要ペース・必要人数：算出対象外</b><br>締切を超過しています。残作業と配置を確認してください。</p>`;return;
+      }
+      const safeWorkers=Math.max(1,result.currentWorkers),person=Math.ceil(result.requiredRate/safeWorkers),per15=Math.ceil(person/4);
+      workerResult.innerHTML=`<strong>${state.effectiveTime}から${result.currentWorkers}名：1人あたり ${person.toLocaleString()}店舗/時・${per15.toLocaleString()}店舗/15分</strong><p>残り${result.remaining.toLocaleString()}店舗／最終締切${clock(result.deadline)}／実働${result.effectiveMinutes}分（休憩除外）／チーム必要速度${result.requiredRate.toLocaleString()}店舗/時</p><p><b>自動提案：${result.requiredWorkers}名</b>（1人${state.onePersonRate.toLocaleString()}店舗/時基準）・${result.action}</p>`;
     }
     function renderAlerts(rows,now){
       const alerts=alertRows(rows,now);alertList.innerHTML=alerts.length?alerts.map(x=>{const advice=alertAdvice(x,now);return`<div class="alert-row ${x.danger?'danger':x.tier==='30'?'urgent':'warn'}"><div><b>${escapeHtml(advice.title)}</b><p>${escapeHtml(advice.action)}</p><small>${escapeHtml(advice.detail)}</small></div></div>`}).join(''):'<div class="alert-row ok"><div><b>現在、緊急アラートはありません</b><small>進捗を入力すると実績速度から先回り判定します。</small></div></div>';
@@ -456,7 +476,7 @@
       collect();const names=state.activeProductivitySession.names;state.productivitySessions=[...(state.productivitySessions||[]),productivityRecord(state.activeProductivitySession)].slice(-2000);state.activeProductivitySession=null;await saveState('shipping_productivity_end');productivityMessage.textContent=`${names.join('・')}さんの担当記録を終了しました。`;
     }
     function renderCards(rows,now){
-      paceGrid.innerHTML=rows.filter(x=>x.item.planned>0).map(x=>{const done=Boolean(x.item.completedAt),reached=x.remaining===0,awaiting=reached&&!done,late=!done&&!awaiting&&now>=x.deadline,active=!done&&!awaiting&&now>=x.start&&now<x.deadline,tone=done?'var(--green)':awaiting?'var(--amber)':late?'var(--red)':active?'var(--amber)':'var(--blue)',bg=done?'#f0faf6':awaiting?'#fff9ed':late?'#fff1f3':active?'#fff9ed':'#f7f9fd',status=done?'完了':awaiting?'完了確認待ち':late?'締切超過':active?'処理時間中':'待機',person=Math.ceil(x.rate/state.workers),needed=requiredWorkersFor(x,now);return `<article class="pace-card" style="--tone:${tone};--card-bg:${bg}"><header><h3>${escapeHtml(x.item.area)}</h3><b class="status">${status}</b></header><p class="window">着手 ${clock(x.start)} → 締切 ${x.item.cutoff}（休憩除外の実働${x.work}分）</p><div class="pace-metrics"><div><small>残り店舗</small><strong>${x.remaining.toLocaleString()}店舗</strong></div><div><small>チーム必要速度</small><strong>${x.rate.toLocaleString()}店舗/時</strong></div><div><small>15分目標</small><strong>${x.per15.toLocaleString()}店舗</strong></div></div><p class="note"><b>終了予測 ${forecastFor(x,now)}</b>／必要人数 ${needed>=99?'算出不可':needed+'名'}<br><b>${state.effectiveTime}から${state.workers}名：</b>1人あたり <b>${person.toLocaleString()}店舗/時</b>・<b>${Math.ceil(person/4).toLocaleString()}店舗/15分</b>${x.groupCount>1?`<br>${x.item.cutoff}締切の${x.groupCount}便合計で計算`:''}</p></article>`}).join('')||'<p>計画店舗数を入力すると表示されます。</p>';
+      paceGrid.innerHTML=rows.filter(x=>x.item.planned>0).map(x=>{const done=Boolean(x.item.completedAt),reached=x.remaining===0,awaiting=reached&&!done,late=!done&&!awaiting&&now>=x.deadline,active=!done&&!awaiting&&now>=x.start&&now<x.deadline,tone=done?'var(--green)':awaiting?'var(--amber)':late?'var(--red)':active?'var(--amber)':'var(--blue)',bg=done?'#f0faf6':awaiting?'#fff9ed':late?'#fff1f3':active?'#fff9ed':'#f7f9fd',status=done?'完了':awaiting?'完了確認待ち':late?'締切超過':active?'処理時間中':'待機',current=effectiveCurrentWorkers(now),person=current>0&&!late?Math.ceil(x.rate/current):0,needed=late?null:requiredWorkersFor(x,now),rateText=late?'算出対象外':x.rate.toLocaleString()+'店舗/時',per15Text=late?'―':x.per15.toLocaleString()+'店舗',note=late?`<b>締切超過</b>／必要人数 算出対象外<br>締切を超過しています。残作業を確認してください。`:`<b>終了予測 ${forecastFor(x,now)}</b>／必要人数 ${needed>=99?'算出不可':needed+'名'}<br><b>${state.effectiveTime}から${current}名：</b>1人あたり <b>${person.toLocaleString()}店舗/時</b>・<b>${Math.ceil(person/4).toLocaleString()}店舗/15分</b>${x.groupCount>1?`<br>${x.item.cutoff}締切の${x.groupCount}便合計で計算`:''}`;return `<article class="pace-card" style="--tone:${tone};--card-bg:${bg}"><header><h3>${escapeHtml(x.item.area)}</h3><b class="status">${status}</b></header><p class="window">着手 ${clock(x.start)} → 締切 ${x.item.cutoff}（休憩除外の実働${x.work}分）</p><div class="pace-metrics"><div><small>残り店舗</small><strong>${x.remaining.toLocaleString()}店舗</strong></div><div><small>チーム必要速度</small><strong>${rateText}</strong></div><div><small>15分目標</small><strong>${per15Text}</strong></div></div><p class="note">${note}</p></article>`}).join('')||'<p>計画店舗数を入力すると表示されます。</p>';
     }
     function toggleMobileCard(button){
       const row=button.closest('tr');if(!row)return;
@@ -467,7 +487,7 @@
       return `<td class="mobile-summary-cell"><button type="button" class="mobile-card-toggle" aria-expanded="false" onclick="toggleMobileCard(this)"><span>${escapeHtml(area)}</span><span class="mobile-summary-time">${cutoff}</span><span class="mobile-summary-count">${Number(planned||0).toLocaleString()}店</span><span class="mobile-summary-arrow">⌄</span></button></td>`;
     }
     function renderTable(rows,now){
-      cutoffRows.innerHTML=state.waves.map(x=>{const row=rows.find(r=>r.item.id===x.id),remain=Math.max(0,x.planned-x.completed),done=Boolean(x.completedAt),late=x.planned>0&&!done&&now>=minutes(x.cutoff),needed=row?requiredWorkersFor(row,now):0;return `<tr class="${done?'row-done':late?'row-late':''}"><td data-label="方面／便"><input data-field="area" data-id="${x.id}" value="${escapeHtml(x.area)}"></td><td data-label="締切"><input data-field="cutoff" data-id="${x.id}" type="time" value="${x.cutoff}"></td><td data-label="計画店舗数"><input data-field="planned" data-id="${x.id}" type="number" min="0" value="${x.planned}"></td><td data-label="完了店舗数"><input data-field="completed" data-id="${x.id}" type="number" min="0" value="${x.completed}"></td><td data-label="残り店舗">${remain.toLocaleString()}店舗</td><td data-label="終了予測">${done?new Date(x.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):x.planned&&row?forecastFor(row,now):'-'}</td><td data-label="必要人数">${done?'0名':x.planned?(needed>=99?'至急':needed+'名'):'-'}</td><td data-label="操作"><button class="primary" onclick="completeWave('${x.id}')" ${!x.planned||done?'disabled':''}>${done?'完了済み':'完了'}</button></td></tr>`}).join('');
+      cutoffRows.innerHTML=state.waves.map(x=>{const row=rows.find(r=>r.item.id===x.id),remain=Math.max(0,x.planned-x.completed),done=Boolean(x.completedAt),late=x.planned>0&&!done&&remain>0&&now>=minutes(x.cutoff),needed=row&&!late?requiredWorkersFor(row,now):0;return `<tr class="${done?'row-done':late?'row-late':''}"><td data-label="方面／便"><input data-field="area" data-id="${x.id}" value="${escapeHtml(x.area)}"></td><td data-label="締切"><input data-field="cutoff" data-id="${x.id}" type="time" value="${x.cutoff}"></td><td data-label="計画店舗数"><input data-field="planned" data-id="${x.id}" type="number" min="0" value="${x.planned}"></td><td data-label="完了店舗数"><input data-field="completed" data-id="${x.id}" type="number" min="0" value="${x.completed}"></td><td data-label="残り店舗">${remain.toLocaleString()}店舗</td><td data-label="終了予測">${done?new Date(x.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):late?'締切超過':x.planned&&row?forecastFor(row,now):'-'}</td><td data-label="必要人数">${done||remain<=0?'0名':late?'算出対象外':x.planned?(needed>=99?'算出不可':needed+'名'):'-'}</td><td data-label="操作"><button class="primary" onclick="completeWave('${x.id}')" ${!x.planned||done?'disabled':''}>${done?'完了済み':'完了'}</button></td></tr>`}).join('');
       [...cutoffRows.rows].forEach((tr,index)=>{const item=state.waves[index];if(item)tr.insertAdjacentHTML('afterbegin',mobileCardSummary(item.area,item.cutoff,item.planned))});
     }
     function renderTomorrowPlan(){
@@ -750,8 +770,8 @@
     sharedPin.addEventListener('keydown',event=>{if(event.key==='Enter')unlockSharedPin()});
     document.addEventListener('input',event=>{if(event.target.closest('#app')&&event.target.matches('input,textarea'))formDirty=true});
     setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState(sharedPinValue,{background:true})},15000);
-    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=37').catch(()=>{}));
+    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=38').catch(()=>{}));
   </script>
-  <script src="./ship-pace-ops.js?v=37"></script>
+  <script src="./ship-pace-ops.js?v=38"></script>
 </body>
 </html>
