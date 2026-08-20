@@ -7,6 +7,7 @@
   <title>SHIP PACE｜方面別 出荷締切ナビ</title>
   <link rel="icon" type="image/png" href="./ship-pace-icon.png">
   <link rel="apple-touch-icon" href="./ship-pace-icon.png">
+  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
   <style>
     :root{--ink:#14213d;--muted:#64708a;--line:#dfe5ef;--blue:#315eea;--green:#13805c;--amber:#c57a18;--red:#c94f62;--bg:#f3f6fb}
     *{box-sizing:border-box}html,body{max-width:100%;overflow-x:hidden}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif}
@@ -39,6 +40,7 @@
     .auth{position:fixed;inset:0;background:#f3f6fb;z-index:50;display:none;place-items:center;padding:20px}.auth.open{display:grid}.auth-card{width:min(430px,100%);background:#fff;border:1px solid var(--line);border-radius:22px;padding:28px;box-shadow:0 18px 60px rgba(20,33,61,.15)}.auth-card h2{font-size:28px;margin:8px 0}.auth-card p{color:var(--muted);line-height:1.6}.auth-card input{display:block;width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:16px}.auth-card button{width:100%;margin-top:10px}.auth-message{font-size:12px;color:var(--green)}
     .mobile-progress-nav{display:none}
     .mobile-summary-cell{display:none}
+    .ops-dashboard{padding:20px;border:2px solid #cbd8ff;background:linear-gradient(145deg,#fff 0,#f5f8ff 100%)}.ops-dashboard-head{display:flex;justify-content:space-between;gap:12px;align-items:start}.ops-dashboard h2{margin:3px 0;font-size:24px}.ops-asof{color:var(--muted);font-weight:800;font-size:13px}.ops-variance{margin:14px 0 8px;font-size:30px;font-weight:950}.ops-variance.ahead{color:var(--blue)}.ops-variance.behind{color:var(--red)}.ops-variance.on-plan{color:var(--green)}.ops-dashboard-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.ops-kpi{padding:12px;border-radius:14px;background:#fff;border:1px solid var(--line)}.ops-kpi small{display:block;color:var(--muted);font-size:11px}.ops-kpi strong{display:block;margin-top:5px;font-size:17px}.ops-action{margin-top:12px;padding:12px;border-radius:13px;background:#edf9f4;color:#176c51;font-weight:900}.ops-action.warn{background:#fff0f2;color:#a83549}.active-worker-list{display:grid;gap:8px}.active-worker-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);border-radius:13px;background:#f8faff}.active-worker-row small{display:block;color:var(--muted);margin-top:3px}.active-worker-row button{padding:8px 12px}.scan-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.progress-reminder{border:1px solid #efc68d;background:#fff8e8;border-radius:15px;padding:14px}.progress-reminder[hidden]{display:none}.progress-reminder b{display:block}.progress-reminder p{margin:5px 0 10px;color:#6b552d}.snapshot-status{display:flex;gap:7px;overflow-x:auto;padding:4px 0 2px}.snapshot-chip{white-space:nowrap;border-radius:999px;padding:7px 10px;background:#eef1f6;color:var(--muted);font-size:12px;font-weight:800}.snapshot-chip.done{background:#e7f7f0;color:var(--green)}.snapshot-chip.missing{background:#fff0f2;color:var(--red)}.hourly-grid{display:grid;gap:10px}.hourly-card{border:1px solid var(--line);border-radius:15px;padding:14px}.hourly-card header{margin:0 0 9px}.hourly-card h3{margin:0}.hourly-card .hourly-main{font-size:17px;font-weight:900}.hourly-card .hourly-sub{font-size:12px;color:var(--muted);line-height:1.6}.ranking-row{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:9px;align-items:center;padding:12px;border-bottom:1px solid var(--line)}.rank-number{font-size:20px;font-weight:950;color:var(--blue)}.master-list{display:grid;gap:8px;margin-top:12px}.master-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px;border:1px solid var(--line);border-radius:12px}.master-row small{display:block;color:var(--muted)}.barcode-modal,.confirm-modal{position:fixed;inset:0;z-index:70;display:none;place-items:center;padding:16px;background:rgba(20,33,61,.58)}.barcode-modal.open,.confirm-modal.open{display:grid}.modal-card{width:min(500px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:22px;padding:20px;box-shadow:0 20px 70px rgba(0,0,0,.25)}.modal-card h2{margin:0 0 8px}.scanner-video{width:100%;max-height:42vh;border-radius:14px;background:#101827}.modal-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.modal-actions button{flex:1 1 130px}.late-note{font-size:12px;color:var(--amber);font-weight:800}.details-panel>summary{cursor:pointer;font-size:21px;font-weight:900;list-style:none}.details-panel>summary::-webkit-details-marker{display:none}.details-panel>summary::after{content:'開く ＋';float:right;color:var(--blue);font-size:12px}.details-panel[open]>summary::after{content:'閉じる −'}.details-inner{padding-top:16px}
     #progressPanel{scroll-margin-top:14px}
     @media(max-width:760px){
       .shell{padding:12px 10px calc(112px + env(safe-area-inset-bottom))}.hero,.panel{width:100%;max-width:100%;padding:16px;border-radius:18px}.hero h1{font-size:30px;overflow-wrap:anywhere}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.metric{min-width:0;padding:14px}.metric strong{font-size:21px;overflow-wrap:anywhere}.section-head{width:100%;min-width:0;align-items:flex-start;flex-direction:column}.section-head>div{min-width:0;max-width:100%}.section-head h2,.section-head p{overflow-wrap:anywhere}.pace-grid,.setup-grid,.productivity-stats{grid-template-columns:minmax(0,1fr)}.pace-card,.setup-card,.worker-result,.next{min-width:0;max-width:100%;overflow-wrap:anywhere}.pace-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.pace-metrics strong{font-size:15px}.controls{width:100%;min-width:0}.controls label{flex:1 1 130px;min-width:0}.controls input,.controls select{width:100%;min-width:0}.controls button{flex:1 1 130px;min-width:0}.quick-grid{grid-template-columns:minmax(0,1fr)}.quick-grid>*{min-width:0}.quick-grid button{width:100%;min-height:48px}.footer-actions{flex-wrap:wrap}.footer-actions button{flex:1 1 150px}.history-item{min-width:0;flex-wrap:wrap}.history-item span{min-width:0;overflow-wrap:anywhere}.brand{min-width:0}.brand b{font-size:14px}.brand small{display:none}header{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center}header .ops-status{justify-content:flex-end;min-width:0;gap:5px}header .last-sync{display:none}header .secondary,header .sync{padding:8px;font-size:10px}header .live{font-size:11px}.table-wrap{margin-inline:0}.mobile-card-table{overflow:visible;border:0;background:transparent}.mobile-card-table table,.mobile-card-table tbody,.mobile-card-table tr{display:block;width:100%;min-width:0}.mobile-card-table thead{display:none}.mobile-card-table tr{margin-bottom:12px;border:1px solid var(--line);border-radius:15px;overflow:hidden;background:#fff}.mobile-card-table tr.row-done{background:#effaf5}.mobile-card-table tr.row-late{background:#fff0f2}.mobile-card-table td{display:none;grid-template-columns:104px minmax(0,1fr);align-items:center;gap:10px;width:100%;min-width:0;padding:10px 12px;border-bottom:1px solid var(--line)}.mobile-card-table td.mobile-summary-cell{display:block;padding:0;border:0}.mobile-card-table tr.mobile-expanded td{display:grid}.mobile-card-table tr.mobile-expanded td.mobile-summary-cell{display:block}.mobile-card-table td:last-child{border-bottom:0}.mobile-card-table td::before{content:attr(data-label);font-size:12px;font-weight:800;color:var(--muted)}.mobile-card-table td.mobile-summary-cell::before{display:none}.mobile-card-table td input{width:100%;min-width:0}.mobile-card-table td button{width:100%;min-height:44px}.mobile-card-table .mobile-card-toggle{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;width:100%;min-height:64px;padding:12px 14px;border:0;border-radius:0;background:transparent;color:var(--ink);text-align:left;font-weight:900}.mobile-card-table .mobile-card-toggle .mobile-summary-time,.mobile-card-table .mobile-card-toggle .mobile-summary-count{font-size:13px;color:var(--muted);font-weight:800;white-space:nowrap}.mobile-card-table .mobile-card-toggle .mobile-summary-arrow{color:var(--blue);font-size:18px;transition:transform .2s ease}.mobile-card-table tr.mobile-expanded .mobile-summary-arrow{transform:rotate(180deg)}.mobile-progress-nav{position:fixed;display:flex;align-items:center;justify-content:center;left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:40;min-height:54px;border-radius:17px;background:var(--blue);color:#fff;text-decoration:none;font-weight:900;box-shadow:0 12px 30px rgba(49,94,234,.35)}
@@ -47,6 +49,7 @@
       .mobile-card-table .mobile-card-toggle{grid-template-columns:minmax(0,1fr) auto auto auto}
       .mobile-progress-nav{left:auto;right:14px;width:auto;min-height:42px;padding:0 16px;bottom:calc(12px + env(safe-area-inset-bottom));border-radius:999px;font-size:13px;box-shadow:0 8px 22px rgba(49,94,234,.28);transition:opacity .2s ease,transform .2s ease}
       .mobile-progress-nav.is-hidden{opacity:0;pointer-events:none;transform:translateY(12px)}
+      .ops-dashboard{padding:16px}.ops-dashboard h2{font-size:21px}.ops-variance{font-size:26px}.ops-dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ops-kpi:last-child{grid-column:1/-1}.scan-actions button{flex:1 1 135px;min-height:46px}.ranking-row{grid-template-columns:32px minmax(0,1fr)}.ranking-row>strong:last-child{grid-column:2}.hero{display:none}
     }
   </style>
 </head>
@@ -55,6 +58,17 @@
     <header><div class="brand"><div class="mark"><img src="./ship-pace-icon.png" alt=""></div><div><b>SHIP PACE</b><small>方面別 出荷締切ナビ</small></div></div><div class="ops-status"><button id="syncStatus" class="sync" onclick="openLogin()">端末保存</button><span id="lastSyncText" class="last-sync">未共有</span><button id="testModeButton" class="secondary" onclick="toggleTestMode()">テストモード</button></div><div class="live"><i></i>LIVE</div></header>
     <div id="testModeBar" class="mode-bar" hidden><div><b>テストモード実行中</b><small>入力内容は本番・クラウドへ反映されません。</small></div><button class="secondary" onclick="toggleTestMode()">本番へ戻る</button></div>
     <div id="conflictBox" class="conflict" hidden><b>ほかの端末で新しい更新があります。</b><div>この端末からの保存を停止しました。最新データを読み込んでから入力し直してください。</div><button class="secondary" onclick="resolveConflict()" style="margin-top:9px">最新データを読み込む</button></div>
+    <section id="currentProgressDashboard" class="panel ops-dashboard" aria-live="polite"></section>
+    <section id="activeWorkersPanel" class="panel">
+      <div class="section-head"><div><h2>現在作業中：<span id="activeWorkerCount">0名</span></h2><p>バーコードを読み取ると参加・退出が自動で切り替わります。</p></div></div>
+      <div id="activeWorkerList" class="active-worker-list"></div>
+      <div class="scan-actions"><button class="primary" onclick="openWorkerScanner('attendance')">バーコードを読み取る</button><button class="secondary" onclick="openManualAttendance()">手動で開始・終了</button></div>
+      <div id="attendanceMessage" class="message" aria-live="polite"></div>
+    </section>
+    <section id="progressReminderPanel" class="panel">
+      <div id="progressReminder" class="progress-reminder" hidden></div>
+      <div><b>進捗入力状況</b><div id="snapshotStatus" class="snapshot-status"></div></div>
+    </section>
     <section class="hero">
       <div class="eyebrow">SHIPPING CUTOFF CONTROL</div>
       <h1>締切から、いま必要な速さを。</h1>
@@ -80,10 +94,10 @@
       <div class="setup-grid">
         <div class="setup-card">
           <h3><span class="step">1</span>今日の開始設定</h3>
-          <p>作業開始前に、次の3項目を1回設定します。</p>
+          <p>作業開始前に、開始時刻と基準能力を1回設定します。人数は作業者の参加状況から自動判定します。</p>
           <div class="controls">
             <label>開始時刻<input id="operationStart" type="time" value="09:30"></label>
-            <label>開始時の人数<select id="initialWorkerCount"><option value="1">1名</option><option value="2">2名</option></select></label>
+            <label id="legacyInitialWorkerField" hidden>開始時の人数<select id="initialWorkerCount"><option value="1">1名</option><option value="2">2名</option></select></label>
             <label>1人の基準能力<input id="onePersonRate" type="number" min="1" value="100"></label>
             <button class="primary" onclick="saveStartSettings()">開始設定を保存</button>
           </div>
@@ -93,7 +107,7 @@
           <div class="details-body">
             <p>例：11:20から2名になった場合に入力します。人数が変わらなければ開く必要はありません。</p>
             <div class="controls">
-              <label>変更後の人数<select id="workerChangeCount"><option value="1">1名</option><option value="2">2名</option></select></label>
+              <label>変更後の人数<input id="workerChangeCount" type="number" min="0" max="99" value="1"></label>
               <label>変更した時刻<input id="workerTime" type="time"></label>
               <button class="secondary" onclick="setNow()">現在時刻を入れる</button>
             </div>
@@ -128,14 +142,32 @@
       <div id="workerHistory" class="history-list"></div>
     </section>
     <section id="progressPanel" class="panel">
-      <div class="section-head"><div><h2>進捗入力</h2><p>前回と今回の保存時刻を自動計測し、実績速度・計画差・終了見込みを更新します。</p></div></div>
+      <div class="section-head"><div><h2 id="progressTitle">進捗入力</h2><p>対象時刻の累計完了店舗数を入力します。実入力時刻とは別に保存します。</p></div></div>
       <div class="quick-grid">
+        <label>対象時刻<select id="progressTargetTime"></select></label>
         <label>方面／便<select id="quickWave"></select></label>
         <label>現在の累計完了店舗数<input id="quickCompleted" type="number" min="0" value="0"></label>
         <button class="primary" onclick="saveQuickProgress()">進捗を保存</button>
       </div>
+      <div id="progressTimingMessage" class="late-note"></div>
       <div id="quickResult" class="worker-result"></div>
     </section>
+    <section class="panel">
+      <div class="section-head"><div><h2>時間帯別 全体生産性</h2><p>累計進捗の差分と、作業者タイムラインから自動計算します。</p></div></div>
+      <div id="hourlyProductivity" class="hourly-grid"></div>
+    </section>
+    <section class="panel">
+      <div class="section-head"><div><h2>今日の個人生産性ランキング</h2><p>単独作業30分以上をランキング対象とし、共同作業は含めません。</p></div></div>
+      <div id="personalRanking"></div>
+      <details class="details-panel" style="margin-top:14px"><summary>共同作業実績 <span id="jointCount">0件</span></summary><div id="jointWorkResults" class="details-inner history-list"></div></details>
+    </section>
+    <details class="panel details-panel">
+      <summary>作業者マスター・バーコード管理</summary>
+      <div class="details-inner">
+        <div class="controls"><label>作業者名<input id="newWorkerName" type="text" placeholder="例：田中"></label><button class="primary" onclick="addWorkerMaster()">作業者を追加</button></div>
+        <div id="workerMasterMessage" class="message"></div><div id="workerMasterList" class="master-list"></div>
+      </div>
+    </details>
     <section class="panel">
       <div class="section-head"><div><h2>作業者別 生産性</h2><p>通常はOFFのまま使えます。ONにすると、担当者・時間・処理店舗数を記録して終了予測に活用します。</p></div><div class="controls"><button id="productivityModeButton" class="secondary" onclick="toggleProductivityMode()">生産性モード：OFF</button><button class="secondary" onclick="downloadProductivityCsv()">作業者別実績CSV</button></div></div>
       <div id="productivityContent" class="productivity-content" hidden>
@@ -180,6 +212,9 @@
     </section>
   </main>
   <a class="mobile-progress-nav" href="#progressPanel" aria-label="進捗入力へ移動">進捗入力へ ↓</a>
+  <div id="barcodeModal" class="barcode-modal"><section class="modal-card"><h2 id="barcodeModalTitle">バーコードを読み取る</h2><p id="barcodeModalHelp">カメラをバーコードへ向けてください。</p><video id="barcodeVideo" class="scanner-video" playsinline muted></video><div class="controls"><label>バーコードを手入力<input id="manualBarcode" type="text" inputmode="numeric" autocomplete="off"></label><button class="secondary" onclick="submitManualBarcode()">この番号を使用</button></div><div id="barcodeMessage" class="message"></div><div id="unregisteredWorkerChoices" class="master-list"></div><div class="modal-actions"><button class="secondary" onclick="closeWorkerScanner()">閉じる</button></div></section></div>
+  <div id="manualAttendanceModal" class="barcode-modal"><section class="modal-card"><h2>手動で作業開始・終了</h2><p>カメラが使えない場合の非常用です。バーコードと同じ処理を使用します。</p><div id="manualAttendanceList" class="master-list"></div><div class="modal-actions"><button class="secondary" onclick="closeManualAttendance()">閉じる</button></div></section></div>
+  <div id="completionModal" class="confirm-modal"><section class="modal-card"><h2>便の完了確認</h2><p id="completionPrompt"></p><div class="modal-actions"><button class="primary" onclick="confirmReachedWave()">完了する</button><button class="secondary" onclick="dismissReachedWave()">まだ完了しない</button></div></section></div>
   <div id="authScreen" class="auth"><section class="auth-card"><div class="eyebrow">CLOUD SHARING</div><h2>共通PIN</h2><p>全員共通の4桁PINを入力すると、スマホとパソコンで同じ進捗を共有できます。</p><input id="sharedPin" type="password" inputmode="numeric" maxlength="4" autocomplete="one-time-code" placeholder="4桁PIN"><button class="primary" onclick="unlockSharedPin()">共通PINで開始</button><button class="secondary" onclick="closeLogin()">端末保存のまま使う</button><p id="authMessage" class="auth-message"></p></section></div>
   <script>
     const STORAGE='shipping-cutoff-standalone-v1';
@@ -228,19 +263,19 @@
       const legacyUnits=old.reduce((s,x)=>s+(Number(x.units)||0),0),futureUnits=Number(todayFuture?.totalUnits??todayFuture?.units)||(todayFutureWaves||[]).reduce((s,x)=>s+(Number(x.units)||0),0);
       if(newDay&&saved.date&&old.some(x=>Number(x.planned)>0)&&!planHistory.some(x=>x.date===saved.date))planHistory.unshift({date:saved.date,totalUnits:Number(saved.totalUnits)||legacyUnits,waves:old.map(x=>({id:x.id,area:x.area,cutoff:x.cutoff,planned:Number(x.planned)||0})),savedAt:new Date().toISOString()});
       const savedBreaks=Array.isArray(saved.breaks)?saved.breaks.filter(x=>Array.isArray(x)&&x.length===2&&Number(x[0])<Number(x[1])).map(x=>[Number(x[0]),Number(x[1])]):[];
-      return {date:dateKey(),operationStart:nextOperationStart,totalUnits:newDay?futureUnits:(Number(saved.totalUnits)||legacyUnits),productivityMode:Boolean(saved.productivityMode),productivitySessions:Array.isArray(saved.productivitySessions)?saved.productivitySessions.slice(-2000):[],activeProductivitySession:newDay?null:(saved.activeProductivitySession||null),startWorkers,workers:newDay?startWorkers:(Number(saved.workers)||1),effectiveTime:newDay?nextOperationStart:(saved.effectiveTime||nextOperationStart),onePersonRate:Math.max(1,Number(saved.onePersonRate)||100),breaks:savedBreaks.length?savedBreaks:DEFAULT_BREAKS.map(x=>[...x]),workerChanges:newDay?[]:(Array.isArray(saved.workerChanges)?saved.workerChanges:[]),progressSnapshots:newDay?[]:(Array.isArray(saved.progressSnapshots)?saved.progressSnapshots:[]),planHistory:planHistory.slice(0,60),futurePlans,reports:Array.isArray(saved.reports)?saved.reports:[],auditLog:Array.isArray(saved.auditLog)?saved.auditLog:[],undoStack:Array.isArray(saved.undoStack)?saved.undoStack:[],syncRevision:saved.syncRevision||'',syncDevice:saved.syncDevice||'',waves:defaults.map(x=>{const prev=sourceWaves.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
+      return {date:dateKey(),operationStart:nextOperationStart,totalUnits:newDay?futureUnits:(Number(saved.totalUnits)||legacyUnits),productivityMode:Boolean(saved.productivityMode),productivitySessions:Array.isArray(saved.productivitySessions)?saved.productivitySessions.slice(-2000):[],activeProductivitySession:newDay?null:(saved.activeProductivitySession||null),startWorkers,workers:newDay?0:(Number(saved.workers)||0),effectiveTime:newDay?nextOperationStart:(saved.effectiveTime||nextOperationStart),onePersonRate:Math.max(1,Number(saved.onePersonRate)||100),breaks:savedBreaks.length?savedBreaks:DEFAULT_BREAKS.map(x=>[...x]),workerChanges:newDay?[]:(Array.isArray(saved.workerChanges)?saved.workerChanges:[]),progressSnapshots:newDay?[]:(Array.isArray(saved.progressSnapshots)?saved.progressSnapshots:[]),workerMaster:Array.isArray(saved.workerMaster)?saved.workerMaster:[],workerSessions:newDay?[]:(Array.isArray(saved.workerSessions)?saved.workerSessions:[]),staffingTimeline:newDay?[]:(Array.isArray(saved.staffingTimeline)?saved.staffingTimeline:[]),progressCheckpoints:newDay?[]:(Array.isArray(saved.progressCheckpoints)?saved.progressCheckpoints:[]),completionDismissals:newDay?[]:(Array.isArray(saved.completionDismissals)?saved.completionDismissals:[]),planHistory:planHistory.slice(0,60),futurePlans,reports:Array.isArray(saved.reports)?saved.reports:[],auditLog:Array.isArray(saved.auditLog)?saved.auditLog:[],undoStack:Array.isArray(saved.undoStack)?saved.undoStack:[],syncRevision:saved.syncRevision||'',syncDevice:saved.syncDevice||'',waves:defaults.map(x=>{const prev=sourceWaves.find(y=>y.id===x.id)||{};return {...x,area:prev.area||x.area,cutoff:prev.cutoff||x.cutoff,planned:Number(prev.planned)||0,completed:newDay?0:Number(prev.completed)||0,completedAt:newDay?null:prev.completedAt||null}})};
     }
     let state=load();
     let lastStableState=JSON.parse(JSON.stringify(state));
     const persist=()=>localStorage.setItem(isTestMode?TEST_STORAGE:STORAGE,JSON.stringify(state));
     const snapshotState=value=>{const copy=JSON.parse(JSON.stringify(value));delete copy.auditLog;delete copy.undoStack;delete copy.productivitySessions;delete copy.activeProductivitySession;delete copy.syncRevision;delete copy.syncDevice;delete copy.changeType;delete copy.cloudUpdatedAt;return copy};
-    const changeLabels={shipping_progress:'進捗保存',shipping_complete:'便を完了',shipping_interval_progress:'時間別進捗',shipping_start_change:'開始時刻変更',shipping_worker_change:'人数変更',shipping_break_change:'休憩時間変更',shipping_productivity_mode:'生産性モード変更',shipping_productivity_change:'担当者交代',shipping_productivity_end:'担当者記録終了',shipping_reset:'実績リセット',shipping_copy_previous:'前日計画複製',shipping_tomorrow_plan:'翌日計画保存',shipping_daily_report:'日報保存',shipping_undo:'操作取消'};
+    const changeLabels={shipping_progress:'進捗保存',shipping_complete:'便を完了',shipping_completion_deferred:'便完了を保留',shipping_interval_progress:'時間別進捗',shipping_snapshot_edit:'進捗スナップショット修正',shipping_start_change:'開始時刻変更',shipping_worker_change:'人数変更',shipping_worker_start:'作業者が参加',shipping_worker_end:'作業者が退出',shipping_worker_master:'作業者マスター変更',shipping_barcode_link:'バーコード登録変更',shipping_break_change:'休憩時間変更',shipping_productivity_mode:'生産性モード変更',shipping_productivity_change:'担当者交代',shipping_productivity_end:'担当者記録終了',shipping_reset:'実績リセット',shipping_copy_previous:'前日計画複製',shipping_tomorrow_plan:'翌日計画保存',shipping_daily_report:'日報保存',shipping_undo:'操作取消'};
     function groupedRows(){
       const groups=[];for(const item of state.waves.filter(x=>x.planned>0)){let g=groups.find(x=>x.cutoff===item.cutoff);if(!g){g={cutoff:item.cutoff,deadline:minutes(item.cutoff),items:[]};groups.push(g)}g.items.push(item)}
       groups.sort((a,b)=>a.deadline-b.deadline);let cursor=minutes(state.operationStart||'09:30');
       return groups.flatMap(g=>{
         const groupPlanned=g.items.reduce((s,x)=>s+x.planned,0),groupCompleted=g.items.reduce((s,x)=>s+Math.min(x.completed,x.planned),0),remaining=Math.max(0,groupPlanned-groupCompleted);
-        const allDone=groupPlanned>0&&remaining===0,completionTimes=g.items.filter(x=>x.planned>0).map(x=>x.completedAt).filter(Boolean);
+        const allDone=groupPlanned>0&&g.items.filter(x=>x.planned>0).every(x=>Boolean(x.completedAt)),completionTimes=g.items.filter(x=>x.planned>0).map(x=>x.completedAt).filter(Boolean);
         const completedAt=allDone&&completionTimes.length?Math.max(...completionTimes.map(x=>{const d=new Date(x);return d.getHours()*60+d.getMinutes()})):null;
         const start=cursor,work=workingMinutes(start,g.deadline),rate=remaining&&work?Math.ceil(remaining/(work/60)):0;
         if(allDone&&completedAt!==null&&completedAt<g.deadline)cursor=completedAt;else cursor=g.deadline;
@@ -293,7 +328,7 @@
       return{title:`${x.item.area}便は締切まであと${Math.max(0,x.mins)}分です`,action,detail:`残り${x.remaining.toLocaleString()}店舗／実績速度 ${x.rate?x.rate.toLocaleString()+'店舗/時':'未計測'}／終了予測 ${forecastText}／必要人数 ${needed>=99?'算出不可':needed+'名'}`};
     }
     function render(){
-      const now=nowMinutes(),rows=groupedRows(),pending=rows.filter(x=>x.item.planned>0&&x.remaining>0),done=rows.filter(x=>x.item.planned>0&&x.remaining===0).length;
+      const now=nowMinutes(),rows=groupedRows(),pending=rows.filter(x=>x.item.planned>0&&!x.item.completedAt),done=state.waves.filter(x=>x.planned>0&&x.completedAt).length;
       testModeBar.hidden=!isTestMode;testModeButton.textContent=isTestMode?'本番へ戻る':'テストモード';voiceButton.textContent=voiceEnabled?'音声案内：ON':'音声案内を有効化';
       renderNotificationState();
       tomorrowPlanDate.min=offsetDateKey(1);if(!tomorrowPlanDate.value||tomorrowPlanDate.value<=dateKey())tomorrowPlanDate.value=offsetDateKey(1);
@@ -314,7 +349,7 @@
       nextAction.innerHTML=`<small>NEXT ACTION・次に処理する便</small><h3>${escapeHtml(next.item.area)}を${next.item.cutoff}までに残り${next.remaining.toLocaleString()}店舗</h3><p>${clock(next.start)}からの枠で、現在時刻から必要なチーム速度は <b>${rate}</b> です。全体は <b>${(Number(state.totalUnits)||0).toLocaleString()}ユニット</b>${state.totalUnits?`（1店舗平均 ${unitsPerStore.toFixed(1)}ユニット）`:''}です。</p>`;
     }
     function renderWorker(pending,now){
-      const total=pending.reduce((s,x)=>s+x.remaining,0),final=pending.length?Math.max(...pending.map(x=>x.deadline)):1020,start=Math.max(now,minutes(state.effectiveTime),minutes(state.operationStart||'09:30')),work=Math.max(1,workingMinutes(start,final)),team=Math.ceil(total/(work/60)),person=Math.ceil(team/state.workers),per15=Math.ceil(person/4),suggested=Math.max(1,Math.ceil(team/state.onePersonRate)),gap=suggested-state.workers;
+      const total=pending.reduce((s,x)=>s+x.remaining,0),final=pending.length?Math.max(...pending.map(x=>x.deadline)):1020,start=Math.max(now,minutes(state.effectiveTime),minutes(state.operationStart||'09:30')),work=Math.max(1,workingMinutes(start,final)),team=Math.ceil(total/(work/60)),safeWorkers=Math.max(1,Number(state.workers)||0),person=Math.ceil(team/safeWorkers),per15=Math.ceil(person/4),suggested=Math.max(1,Math.ceil(team/state.onePersonRate)),gap=suggested-(Number(state.workers)||0);
       workerResult.innerHTML=`<strong>${state.effectiveTime}から${state.workers}名：1人あたり ${person.toLocaleString()}店舗/時・${per15.toLocaleString()}店舗/15分</strong><p>残り${total.toLocaleString()}店舗／最終締切${clock(final)}／実働${work}分（休憩除外）／チーム必要速度${team.toLocaleString()}店舗/時</p><p><b>自動提案：${suggested}名</b>（1人${state.onePersonRate.toLocaleString()}店舗/時基準）${gap>0?`・あと${gap}名必要`:gap<0?`・${Math.abs(gap)}名の余裕`:'・現在人数で対応可能'}</p>`;
     }
     function renderAlerts(rows,now){
@@ -404,7 +439,7 @@
       return `<td class="mobile-summary-cell"><button type="button" class="mobile-card-toggle" aria-expanded="false" onclick="toggleMobileCard(this)"><span>${escapeHtml(area)}</span><span class="mobile-summary-time">${cutoff}</span><span class="mobile-summary-count">${Number(planned||0).toLocaleString()}店</span><span class="mobile-summary-arrow">⌄</span></button></td>`;
     }
     function renderTable(rows,now){
-      cutoffRows.innerHTML=state.waves.map(x=>{const row=rows.find(r=>r.item.id===x.id),remain=Math.max(0,x.planned-x.completed),done=x.planned>0&&remain===0,late=x.planned>0&&remain>0&&now>=minutes(x.cutoff),needed=row?requiredWorkersFor(row,now):0;return `<tr class="${done?'row-done':late?'row-late':''}"><td data-label="方面／便"><input data-field="area" data-id="${x.id}" value="${escapeHtml(x.area)}"></td><td data-label="締切"><input data-field="cutoff" data-id="${x.id}" type="time" value="${x.cutoff}"></td><td data-label="計画店舗数"><input data-field="planned" data-id="${x.id}" type="number" min="0" value="${x.planned}"></td><td data-label="完了店舗数"><input data-field="completed" data-id="${x.id}" type="number" min="0" value="${x.completed}"></td><td data-label="残り店舗">${remain.toLocaleString()}店舗</td><td data-label="終了予測">${x.planned&&row?forecastFor(row,now):'-'}</td><td data-label="必要人数">${x.planned?(needed>=99?'至急':needed+'名'):'-'}</td><td data-label="操作"><button class="primary" onclick="completeWave('${x.id}')" ${!x.planned||done?'disabled':''}>完了</button></td></tr>`}).join('');
+      cutoffRows.innerHTML=state.waves.map(x=>{const row=rows.find(r=>r.item.id===x.id),remain=Math.max(0,x.planned-x.completed),done=Boolean(x.completedAt),late=x.planned>0&&!done&&now>=minutes(x.cutoff),needed=row?requiredWorkersFor(row,now):0;return `<tr class="${done?'row-done':late?'row-late':''}"><td data-label="方面／便"><input data-field="area" data-id="${x.id}" value="${escapeHtml(x.area)}"></td><td data-label="締切"><input data-field="cutoff" data-id="${x.id}" type="time" value="${x.cutoff}"></td><td data-label="計画店舗数"><input data-field="planned" data-id="${x.id}" type="number" min="0" value="${x.planned}"></td><td data-label="完了店舗数"><input data-field="completed" data-id="${x.id}" type="number" min="0" value="${x.completed}"></td><td data-label="残り店舗">${remain.toLocaleString()}店舗</td><td data-label="終了予測">${done?new Date(x.completedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):x.planned&&row?forecastFor(row,now):'-'}</td><td data-label="必要人数">${done?'0名':x.planned?(needed>=99?'至急':needed+'名'):'-'}</td><td data-label="操作"><button class="primary" onclick="completeWave('${x.id}')" ${!x.planned||done?'disabled':''}>${done?'完了済み':'完了'}</button></td></tr>`}).join('');
       [...cutoffRows.rows].forEach((tr,index)=>{const item=state.waves[index];if(item)tr.insertAdjacentHTML('afterbegin',mobileCardSummary(item.area,item.cutoff,item.planned))});
     }
     function renderTomorrowPlan(){
@@ -488,9 +523,9 @@
       persist();render();await saveCloudState('shipping_undo');lastStableState=JSON.parse(JSON.stringify(state));saveMessage.textContent='直前の操作を取り消しました。';
     }
     async function saveProgress(){
-      collect();const now=new Date().toISOString();state.waves.forEach(x=>{const done=x.planned>0&&x.completed>=x.planned;if(done&&!x.completedAt)x.completedAt=now;if(!done)x.completedAt=null});await saveState('shipping_progress');saveMessage.textContent='進捗と完了時刻を保存し、必要速度を再計算しました。';
+      collect();await saveState('shipping_progress');saveMessage.textContent='進捗を保存し、必要速度を再計算しました。計画到達便は「完了」で確定してください。';
     }
-    async function completeWave(id){collect();const item=state.waves.find(x=>x.id===id);if(!item||!item.planned)return;item.completed=item.planned;item.completedAt=new Date().toISOString();state.progressSnapshots.push({id:crypto.randomUUID?.()||String(Date.now()),waveId:id,completed:item.completed,interval:0,at:item.completedAt});await saveState('shipping_complete');const next=groupedRows().find(x=>x.item.planned>0&&x.remaining>0);speak(`${item.area}便が完了しました。${next?`次は${next.item.area}便です。${next.item.cutoff}までに残り${next.remaining}店舗処理してください。`:'本日の便はすべて完了しました。'}`);saveMessage.textContent=`${item.area}を完了し、次便を再計算しました。`}
+    async function completeWave(id){collect();const item=state.waves.find(x=>x.id===id);if(!item||!item.planned||item.completedAt)return;item.completed=Math.max(item.planned,item.completed);item.completedAt=new Date().toISOString();state.progressSnapshots.push({id:crypto.randomUUID?.()||String(Date.now()),waveId:id,completed:item.completed,interval:0,at:item.completedAt,inputAt:item.completedAt,source:'completion'});await saveState('shipping_complete');const next=groupedRows().find(x=>x.item.planned>0&&!x.item.completedAt);speak(`${item.area}便が完了しました。${next?`次は${next.item.area}便です。${next.item.cutoff}までに残り${next.remaining}店舗処理してください。`:'本日の便はすべて完了しました。'}`);saveMessage.textContent=`${item.area}を完了し、次便の必要ペースと終了予測を再計算しました。`}
     async function saveQuickProgress(){const id=quickWave.value,item=state.waves.find(x=>x.id===id),completed=Math.max(0,Math.round(Number(quickCompleted.value)||0));if(!item)return;item.completed=Math.min(Math.max(completed,0),Math.max(item.planned,completed));const at=new Date().toISOString(),previous=snapshotsFor(id).at(-1),elapsed=previous?Math.max(1,Math.round((new Date(at)-new Date(previous.at))/60000)):0;state.progressSnapshots.push({id:crypto.randomUUID?.()||String(Date.now()),waveId:id,completed:item.completed,interval:elapsed,at});if(item.planned>0&&item.completed>=item.planned&&!item.completedAt)item.completedAt=at;if(item.completed<item.planned)item.completedAt=null;state.progressSnapshots=state.progressSnapshots.slice(-500);await saveState('shipping_interval_progress');quickResult.scrollIntoView({behavior:'smooth',block:'center'})}
     function renderBreakSettings(){
       breakSummary.innerHTML=state.breaks.map(([start,end])=>`<span>${clock(start)}〜${clock(end)} 休憩</span>`).join('');
@@ -688,5 +723,6 @@
     setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState(sharedPinValue,{background:true})},15000);
     if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
   </script>
+  <script src="./ship-pace-ops.js"></script>
 </body>
 </html>
