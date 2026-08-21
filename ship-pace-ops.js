@@ -23,10 +23,13 @@
     return state.workerSessions.filter(s=>new Date(s.startAt)<=time&&(!s.endAt||new Date(s.endAt)>time));
   }
   function shipPaceCurrentWorkerCount(at=new Date()){
-    const time=at instanceof Date?at:new Date(at),hasTimeline=state.staffingTimeline.some(event=>new Date(event.at)<=time);
-    if(!hasTimeline)return opsActiveSessions(time).length;
+    const time=at instanceof Date?at:new Date(at),activeCount=opsActiveSessions(time).length,hasTimeline=state.staffingTimeline.some(event=>new Date(event.at)<=time);
+    if(!hasTimeline)return activeCount;
     const event=opsLatestStaffingAt(time);
-    return Number.isFinite(Number(event?.count))?Math.max(0,Number(event.count)):opsActiveSessions(time).length;
+    // A named worker with an open session is authoritative.  Emergency manual
+    // staffing corrections may add unscanned workers, but must never cancel a
+    // worker who is visibly still active.
+    return Number.isFinite(Number(event?.count))?Math.max(activeCount,Math.max(0,Number(event.count))):activeCount;
   }
   window.shipPaceCurrentWorkerCount=shipPaceCurrentWorkerCount;
   function opsActiveIds(at=new Date()){return opsActiveSessions(at).map(s=>s.workerId)}
@@ -258,7 +261,7 @@
   window.confirmReachedWave=confirmReachedWave;window.dismissReachedWave=dismissReachedWave;
 
   saveStartSettings=async function(){const next=operationStart.value||'09:30';state.operationStart=next;state.effectiveTime=next;opsRebuildStaffingTimeline();await saveState('shipping_start_change');workerMessage.textContent=`今日の計画開始を${next}に設定しました。作業者の人時は実際の参加時刻から計算します。`};
-  applyWorkers=async function(){const count=Math.max(0,Number(workerChangeCount.value)||0),time=workerTime.value||clock(nowMinutes()),at=opsIsoAt(time);state.workers=count;state.effectiveTime=time;if(changeRateToggle.checked)state.onePersonRate=Math.max(1,Number(changeOnePersonRate.value)||state.onePersonRate);state.workerChanges.push({time,workers:count,onePersonRate:state.onePersonRate,operationStart:state.operationStart,kind:'manual_override',rateChanged:changeRateToggle.checked,savedAt:new Date().toISOString()});opsRecordStaffing(at,'manual_override',count,[]);await saveState('shipping_worker_change');workerMessage.textContent=`非常用修正：${time}から${count}名として人数タイムラインを修正しました。バーコード人数との二重計上はありません。`};
+  applyWorkers=async function(){const requested=Math.max(0,Number(workerChangeCount.value)||0),time=workerTime.value||clock(nowMinutes()),at=opsIsoAt(time),activeCount=opsActiveSessions(new Date(at)).length,count=Math.max(requested,activeCount);state.workers=count;state.effectiveTime=time;if(changeRateToggle.checked)state.onePersonRate=Math.max(1,Number(changeOnePersonRate.value)||state.onePersonRate);state.workerChanges.push({time,workers:count,requestedWorkers:requested,onePersonRate:state.onePersonRate,operationStart:state.operationStart,kind:'manual_override',rateChanged:changeRateToggle.checked,savedAt:new Date().toISOString()});opsRecordStaffing(at,'manual_override',count,opsActiveIds(new Date(at)));await saveState('shipping_worker_change');workerMessage.textContent=requested<activeCount?`現在${activeCount}名が作業中のため、${time}から${activeCount}名として保存しました。人数を減らす場合は、対象作業者の「終了」を押してください。`:`非常用修正：${time}から${count}名として人数タイムラインを修正しました。バーコード人数との二重計上はありません。`};
   const opsLegacyCompleteWave=completeWave;completeWave=async function(id){state.completionDismissals=state.completionDismissals.filter(x=>x.waveId!==id);forgetDeferredCompletion(id);await opsLegacyCompleteWave(id);render()};
   resetToday=async function(){if(!confirm('本日の完了店舗数・完了時刻・作業者記録をリセットしますか？'))return;state.waves.forEach(x=>{x.completed=0;x.completedAt=null});state.progressSnapshots=[];state.progressCheckpoints=[];state.workerSessions=[];state.staffingTimeline=[];state.completionDismissals=[];clearDeferredCompletionGuards();state.productivitySessions=(state.productivitySessions||[]).filter(x=>x.date!==state.date);state.activeProductivitySession=null;await saveState('shipping_reset');saveMessage.textContent='本日の実績・作業者・人数・進捗スナップショットをリセットしました。'};
 
