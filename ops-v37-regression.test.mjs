@@ -277,7 +277,9 @@ test('使い方ガイドはiPhone幅で横にはみ出さないレイアウト�
 
 test('詳しい操作ガイドは同一サイトの正式な8ページPDFを別画面で開く',()=>{
   const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
-  assert.match(html,/href="\.\/manual\.pdf" target="_blank" rel="noopener">詳しい操作ガイドを見る<\/a>/u);
+  assert.match(html,/href="\.\/manual\.pdf" target="_blank" rel="noopener noreferrer" onclick="openManualGuide\(event\)">詳しい操作ガイドを見る<\/a>/u);
+  assert.match(html,/class="usage-guide-manual-note">別画面で開きます<\/small>/u);
+  assert.match(html,/function openManualGuide\(event\)\{event\.preventDefault\(\);const manualUrl=new URL\('\.\/manual\.pdf',window\.location\.href\)\.href;window\.open\(manualUrl,'_blank','noopener,noreferrer'\)\}/u);
   assert.match(html,/<span class="usage-guide-title-line">SHIP PACE<\/span><span class="usage-guide-title-line">これだけ覚えればOK<\/span>/u);
   const pdf=readFileSync(new URL('./manual.pdf',import.meta.url));
   assert.equal(pdf.subarray(0,5).toString(),'%PDF-');
