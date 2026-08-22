@@ -275,17 +275,25 @@ test('使い方ガイドはiPhone幅で横にはみ出さないレイアウト�
   assert.match(html,/max-height:calc\(100dvh - 20px\)/u);
 });
 
-test('詳しい操作ガイドはSHIP PACE内に表示し固定の戻る操作を提供する',()=>{
+test('詳しい操作ガイドは8枚の画像をSHIP PACE内でページ送りできる',()=>{
   const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
   assert.match(html,/href="\.\/manual\.pdf" onclick="openManualGuide\(event\)">詳しい操作ガイドを見る<\/a>/u);
   assert.match(html,/class="usage-guide-manual-note">SHIP PACE内で開きます<\/small>/u);
-  assert.match(html,/id="manualGuideView" class="manual-guide-view"[\s\S]*?← SHIP PACEに戻る[\s\S]*?<iframe class="manual-guide-frame" src="\.\/manual\.pdf"/u);
-  assert.match(html,/\.manual-guide-view\{position:fixed;inset:0;z-index:100;display:grid;grid-template-rows:auto minmax\(0,1fr\);width:100%;max-width:100%;height:100dvh/u);
-  assert.match(html,/function openManualGuide\(event\)\{event\.preventDefault\(\);manualGuideScrollY=window\.scrollY;usageGuide\.hidden=true;manualGuideView\.hidden=false;/u);
+  assert.match(html,/id="manualGuideView" class="manual-guide-view"[\s\S]*?← SHIP PACEに戻る[\s\S]*?<img id="manualGuideImage"[\s\S]*?src="\.\/manual-pages\/page-1\.jpg"[\s\S]*?id="manualGuidePrev"[\s\S]*?>前へ<\/button>[\s\S]*?1 \/ 8[\s\S]*?id="manualGuideNext"[\s\S]*?>次へ<\/button>/u);
+  assert.doesNotMatch(html,/<iframe class="manual-guide-frame"/u);
+  assert.match(html,/\.manual-guide-view\{position:fixed;inset:0;z-index:100;display:grid;grid-template-rows:auto minmax\(0,1fr\) auto;width:100%;max-width:100%;height:100dvh/u);
+  assert.match(html,/const MANUAL_PAGE_COUNT=8;/u);
+  assert.match(html,/function changeManualPage\(delta\)/u);
+  assert.match(html,/manualGuidePage\.addEventListener\('touchend'/u);
+  assert.match(html,/function openManualGuide\(event\)\{event\.preventDefault\(\);manualGuideScrollY=window\.scrollY;manualPageNumber=1;renderManualPage\(\);usageGuide\.hidden=true;manualGuideView\.hidden=false;/u);
   assert.match(html,/function closeManualGuide\(\)\{manualGuideView\.hidden=true;document\.body\.classList\.remove\('usage-guide-open'\);window\.scrollTo\(0,manualGuideScrollY\);/u);
   assert.match(html,/<span class="usage-guide-title-line">SHIP PACE<\/span><span class="usage-guide-title-line">これだけ覚えればOK<\/span>/u);
   const pdf=readFileSync(new URL('./manual.pdf',import.meta.url));
   assert.equal(pdf.subarray(0,5).toString(),'%PDF-');
   const pageObjects=pdf.toString('latin1').match(/\/Type\s*\/Page(?!s)\b/g)||[];
   assert.equal(pageObjects.length,8);
+  for(let page=1;page<=8;page+=1){
+    const image=readFileSync(new URL(`./manual-pages/page-${page}.jpg`,import.meta.url));
+    assert.deepEqual([...image.subarray(0,3)],[0xff,0xd8,0xff]);
+  }
 });
