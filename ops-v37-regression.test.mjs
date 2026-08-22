@@ -275,11 +275,14 @@ test('使い方ガイドはiPhone幅で横にはみ出さないレイアウト�
   assert.match(html,/max-height:calc\(100dvh - 20px\)/u);
 });
 
-test('詳しい操作ガイドは同一サイトの正式な8ページPDFを別画面で開く',()=>{
+test('詳しい操作ガイドはSHIP PACE内に表示し固定の戻る操作を提供する',()=>{
   const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
-  assert.match(html,/href="\.\/manual\.pdf" target="_blank" rel="noopener noreferrer" onclick="openManualGuide\(event\)">詳しい操作ガイドを見る<\/a>/u);
-  assert.match(html,/class="usage-guide-manual-note">別画面で開きます<\/small>/u);
-  assert.match(html,/function openManualGuide\(event\)\{event\.preventDefault\(\);const manualUrl=new URL\('\.\/manual\.pdf',window\.location\.href\)\.href;window\.open\(manualUrl,'_blank','noopener,noreferrer'\)\}/u);
+  assert.match(html,/href="\.\/manual\.pdf" onclick="openManualGuide\(event\)">詳しい操作ガイドを見る<\/a>/u);
+  assert.match(html,/class="usage-guide-manual-note">SHIP PACE内で開きます<\/small>/u);
+  assert.match(html,/id="manualGuideView" class="manual-guide-view"[\s\S]*?← SHIP PACEに戻る[\s\S]*?<iframe class="manual-guide-frame" src="\.\/manual\.pdf"/u);
+  assert.match(html,/\.manual-guide-view\{position:fixed;inset:0;z-index:100;display:grid;grid-template-rows:auto minmax\(0,1fr\);width:100%;max-width:100%;height:100dvh/u);
+  assert.match(html,/function openManualGuide\(event\)\{event\.preventDefault\(\);manualGuideScrollY=window\.scrollY;usageGuide\.hidden=true;manualGuideView\.hidden=false;/u);
+  assert.match(html,/function closeManualGuide\(\)\{manualGuideView\.hidden=true;document\.body\.classList\.remove\('usage-guide-open'\);window\.scrollTo\(0,manualGuideScrollY\);/u);
   assert.match(html,/<span class="usage-guide-title-line">SHIP PACE<\/span><span class="usage-guide-title-line">これだけ覚えればOK<\/span>/u);
   const pdf=readFileSync(new URL('./manual.pdf',import.meta.url));
   assert.equal(pdf.subarray(0,5).toString(),'%PDF-');
