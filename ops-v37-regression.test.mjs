@@ -18,6 +18,52 @@ const requirement=({remaining,now,deadline,current,onePersonRate=100})=>{
   return{status:'active',required,rate,action:gap>0?`${gap}名増員推奨`:gap<0?`${-gap}名余力あり`:'増員不要'};
 };
 
+const validateNormalTotal=({raw,previous=null,planned=100,confirmUnusual=true})=>{
+  const numeric=Number(String(raw).trim());
+  if(String(raw).trim()===''||!Number.isFinite(numeric)||numeric<0||!Number.isInteger(numeric))return{ok:false,reason:'invalid'};
+  if(previous!==null&&numeric<previous)return{ok:false,reason:'decrease'};
+  const unusualLimit=Math.max(10000,planned*10);
+  if(numeric>unusualLimit&&!confirmUnusual)return{ok:false,reason:'cancelled'};
+  return{ok:true,value:numeric};
+};
+
+test('High修正: 通常進捗は不正値・累計減少を保存せず、異常値は確認する',()=>{
+  assert.deepEqual(validateNormalTotal({raw:'',previous:10}),{ok:false,reason:'invalid'});
+  assert.deepEqual(validateNormalTotal({raw:'abc',previous:10}),{ok:false,reason:'invalid'});
+  assert.deepEqual(validateNormalTotal({raw:'-1',previous:10}),{ok:false,reason:'invalid'});
+  assert.deepEqual(validateNormalTotal({raw:'9',previous:10}),{ok:false,reason:'decrease'});
+  assert.deepEqual(validateNormalTotal({raw:'10001',planned:100,confirmUnusual:false}),{ok:false,reason:'cancelled'});
+  assert.deepEqual(validateNormalTotal({raw:'11',previous:10}),{ok:true,value:11});
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  assert.match(js,/raw===''\|\|!Number\.isFinite\(numeric\)\|\|numeric<0\|\|!Number\.isInteger\(numeric\)/u);
+  assert.match(js,/requestedTotal<Number\(previous\.totalCompleted\)/u);
+  assert.match(js,/requestedTotal>unusualLimit&&!confirm/u);
+});
+
+test('High修正: 未登録バーコードは安全なDOMイベントで表示する',()=>{
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  const block=js.match(/function renderUnregisteredChoices\(barcode\)\{[\s\S]*?\n  \}/u)?.[0]||'';
+  assert.match(block,/replaceChildren\(\)/u);
+  assert.match(block,/document\.createElement\('button'\)/u);
+  assert.match(block,/button\.textContent=worker\.name/u);
+  assert.match(block,/addEventListener\('click'/u);
+  assert.doesNotMatch(block,/innerHTML/u);
+  assert.doesNotMatch(block,/onclick=/u);
+});
+
+test('High修正: 共通PINはサーバー側で5回失敗後15分停止し、平文をLocalStorageへ保存しない',()=>{
+  const sql=readFileSync(new URL('./supabase-setup.sql',import.meta.url),'utf8');
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
+  assert.match(sql,/shipping_cutoff_pin_attempts/u);
+  assert.match(sql,/next_failures >= 5/u);
+  assert.match(sql,/interval '15 minutes'/u);
+  assert.equal((sql.match(/check_shipping_cutoff_pin\(input_workspace, input_pin\)/gu)||[]).length,4);
+  assert.match(html,/sessionStorage\.setItem\(PIN_SESSION,pin\)/u);
+  assert.match(html,/localStorage\.removeItem\(PIN_SESSION\)/u);
+  assert.doesNotMatch(html,/localStorage\.setItem\(PIN_SESSION,pin\)/u);
+  assert.match(html,/__shipPaceAuthError/u);
+});
+
 test('9:30開始は10:00、11:00、12:00…を対象時刻にする',()=>{
   assert.deepEqual(targets(9*60+30,12*60),[10*60,11*60,12*60]);
 });
