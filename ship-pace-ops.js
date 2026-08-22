@@ -104,7 +104,18 @@
   }
   function renderUnregisteredChoices(barcode){
     $('barcodeMessage').textContent=`未登録のバーコードです：${barcode}　誰に紐付けますか？`;
-    $('unregisteredWorkerChoices').innerHTML=state.workerMaster.map(w=>`<button class="secondary" onclick="linkUnknownBarcode('${w.id}','${escapeHtml(barcode)}')">${escapeHtml(w.name)}</button>`).join('')+`<button class="primary" onclick="createWorkerForBarcode('${escapeHtml(barcode)}')">新しい作業者を登録</button>`;
+    const choices=$('unregisteredWorkerChoices');
+    choices.replaceChildren();
+    state.workerMaster.forEach(worker=>{
+      const button=document.createElement('button');
+      button.type='button';button.className='secondary';button.textContent=worker.name;
+      button.addEventListener('click',()=>opsLinkBarcode(worker.id,barcode));
+      choices.appendChild(button);
+    });
+    const createButton=document.createElement('button');
+    createButton.type='button';createButton.className='primary';createButton.textContent='新しい作業者を登録';
+    createButton.addEventListener('click',()=>createWorkerForBarcode(barcode));
+    choices.appendChild(createButton);
   }
   window.linkUnknownBarcode=(id,barcode)=>opsLinkBarcode(id,barcode);
   window.createWorkerForBarcode=async barcode=>{const name=prompt('新しい作業者名');if(!name?.trim())return;const worker={id:opsUuid(),name:name.trim(),barcode:'',createdAt:new Date().toISOString()};state.workerMaster.push(worker);await opsLinkBarcode(worker.id,barcode)};
@@ -245,7 +256,13 @@
     return opsShowNextCompletionCandidate();
   }
   async function opsSaveSnapshot(){
-    const requestedTotal=Math.max(0,Math.round(Number($('quickCompleted').value)||0)),targetMinute=opsNextTarget();if(!Number.isFinite(targetMinute))return;
+    const input=$('quickCompleted'),raw=input.value.trim(),numeric=Number(raw),targetMinute=opsNextTarget();if(!Number.isFinite(targetMinute))return;
+    const showValidationError=message=>{$('quickResult').textContent=message;$('quickResult').scrollIntoView({behavior:'smooth',block:'center'});input.focus()};
+    if(raw===''||!Number.isFinite(numeric)||numeric<0||!Number.isInteger(numeric)){showValidationError('累計完了店舗数は、0以上の整数で入力してください。データは保存されていません。');return}
+    const requestedTotal=Math.round(numeric),previous=[...state.progressCheckpoints].filter(x=>Number(x.targetMinute)<targetMinute).sort((a,b)=>Number(a.targetMinute)-Number(b.targetMinute)).at(-1);
+    if(previous&&requestedTotal<Number(previous.totalCompleted)){showValidationError(`前回の累計${Number(previous.totalCompleted).toLocaleString()}店舗より小さい値は通常入力では保存できません。「例外修正：過去時刻・便を指定」を使用してください。`);return}
+    const plannedTotal=state.waves.reduce((sum,w)=>sum+Math.max(0,Number(w.planned)||0),0),unusualLimit=Math.max(10000,plannedTotal*10);
+    if(requestedTotal>unusualLimit&&!confirm(`累計${requestedTotal.toLocaleString()}店舗は計画${plannedTotal.toLocaleString()}店舗に対して非常に大きな値です。このまま保存しますか？`)){showValidationError('保存を取り消しました。既存データは変更されていません。');return}
     const existed=Boolean(opsCheckpoint(targetMinute)),{totalCompleted,waveValues}=recordGlobalCheckpoint({totalCompleted:requestedTotal,targetMinute});
     await saveState(existed?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').innerHTML=`<strong>${clock(targetMinute)}時点の累計${totalCompleted.toLocaleString()}店舗を保存しました</strong><p>対象時刻と方面別進捗を自動判定し、計画差・生産性・必要ペースを再計算しました。</p>`;$('quickResult').scrollIntoView({behavior:'smooth',block:'center'});
     opsPromptReachedWaves(waveValues,targetMinute);
