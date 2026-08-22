@@ -271,7 +271,7 @@
     const SB_HEADERS={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
     const WORKSPACE_ID='4dad83ad-0fb0-451f-b375-49595c06e538';
     const PIN_SESSION='shipping-cutoff-shared-pin';
-    let sharedPinValue='',cloudBusy=false,cloudUpdatedAt='',lastCloudRevision='',saveConflict=false,longTermReports=[],reportsLoaded=false,formDirty=false;
+    let sharedPinValue='',cloudBusy=false,cloudUpdatedAt='',lastCloudRevision='',saveConflict=false,longTermReports=[],reportsLoaded=false,formDirty=false,lastCloudAuthError=null;
     let tomorrowDraft=null;
     let currentTotalUnitsDraft=null;
     let isTestMode=localStorage.getItem(TEST_MODE_KEY)==='1';
@@ -555,6 +555,11 @@
       document.querySelectorAll('#cutoffRows input').forEach(input=>{const item=state.waves.find(x=>x.id===input.dataset.id);if(!item)return;const f=input.dataset.field;if(f==='planned'||f==='completed')item[f]=Math.max(0,Math.round(Number(input.value)||0));else item[f]=input.value||item[f]});
     }
     function setSync(text,status=''){syncStatus.textContent=text;syncStatus.className='sync '+status}
+    function cloudAuthFailure(payload){
+      const code=payload?.__shipPaceAuthError;if(!code)return false;
+      lastCloudAuthError={code,retryAfterSeconds:Math.max(0,Number(payload.retryAfterSeconds)||0)};
+      setSync(code==='rate_limited'?'PIN一時停止':'PIN未認証','error');return true
+    }
     async function saveCloudState(changeType='shipping_update'){
       if(isTestMode){setSync('テスト中');return true}
       if(!sharedPinValue)return false;
@@ -563,11 +568,11 @@
       cloudBusy=true;setSync('共有中');
       try{
         const check=await fetch(SB_URL+'/rest/v1/rpc/load_shipping_cutoff_state',{method:'POST',headers:SB_HEADERS,cache:'no-store',body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:sharedPinValue})});
-        if(!check.ok)throw new Error('auth');const remote=await check.json();
+        if(!check.ok)throw new Error('auth');const remote=await check.json();if(cloudAuthFailure(remote))return false;
         if(remote?.syncRevision&&lastCloudRevision&&remote.syncRevision!==lastCloudRevision){saveConflict=true;conflictBox.hidden=false;setSync('更新競合','error');return false}
         const revision=`${Date.now()}-${Math.random().toString(36).slice(2,8)}`,clientTime=new Date().toISOString(),payload={...state,changeType,cloudUpdatedAt:clientTime,syncRevision:revision,syncDevice:deviceId};
         const r=await fetch(SB_URL+'/rest/v1/rpc/save_shipping_cutoff_state',{method:'POST',headers:SB_HEADERS,body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:sharedPinValue,input_data:payload,input_expected_revision:lastCloudRevision||''})});
-        if(!r.ok){const detail=await r.json().catch(()=>({}));if(detail.code==='40001'||String(detail.message||'').includes('conflict')){saveConflict=true;conflictBox.hidden=false;setSync('更新競合','error');return false}throw new Error('save')}const result=await r.json();state.syncRevision=revision;state.syncDevice=deviceId;lastCloudRevision=revision;cloudUpdatedAt=result?.updated_at||clientTime;lastSyncText.textContent=`最終共有 ${new Date(cloudUpdatedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`;setSync('共有済み','ok');persist();return true
+        if(!r.ok){const detail=await r.json().catch(()=>({}));if(detail.code==='40001'||String(detail.message||'').includes('conflict')){saveConflict=true;conflictBox.hidden=false;setSync('更新競合','error');return false}throw new Error('save')}const result=await r.json();if(cloudAuthFailure(result))return false;state.syncRevision=revision;state.syncDevice=deviceId;lastCloudRevision=revision;cloudUpdatedAt=result?.updated_at||clientTime;lastSyncText.textContent=`最終共有 ${new Date(cloudUpdatedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`;setSync('共有済み','ok');persist();return true
       }catch(e){setSync('共有エラー','error');return false}finally{cloudBusy=false}
     }
     async function loadCloudState(pin=sharedPinValue,{background=false}={}){
@@ -575,8 +580,8 @@
       try{
         const r=await fetch(SB_URL+'/rest/v1/rpc/load_shipping_cutoff_state',{method:'POST',headers:SB_HEADERS,cache:'no-store',body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:pin})});
         if(!r.ok)throw new Error('invalid');
-        const remote=await r.json(),remoteRevision=remote?.syncRevision||'',sameRevision=Boolean(background&&remoteRevision&&remoteRevision===lastCloudRevision);
-        sharedPinValue=pin;localStorage.setItem(PIN_SESSION,pin);
+        const remote=await r.json();if(cloudAuthFailure(remote))return false;const remoteRevision=remote?.syncRevision||'',sameRevision=Boolean(background&&remoteRevision&&remoteRevision===lastCloudRevision);
+        lastCloudAuthError=null;sharedPinValue=pin;sessionStorage.setItem(PIN_SESSION,pin);localStorage.removeItem(PIN_SESSION);
         if(background&&!sameRevision&&remote?.date&&formDirty){
           saveConflict=true;conflictBox.hidden=false;setSync('更新競合','error');return false
         }
@@ -698,11 +703,11 @@
     }
     async function loadLongTermReports(pin=sharedPinValue){
       if(!pin||isTestMode)return false;
-      try{const r=await fetch(SB_URL+'/rest/v1/rpc/load_shipping_cutoff_reports',{method:'POST',headers:SB_HEADERS,cache:'no-store',body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:pin,input_limit:3650})});if(!r.ok)throw new Error('load reports');longTermReports=await r.json()||[];reportsLoaded=true;renderReports();return true}catch{return false}
+      try{const r=await fetch(SB_URL+'/rest/v1/rpc/load_shipping_cutoff_reports',{method:'POST',headers:SB_HEADERS,cache:'no-store',body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:pin,input_limit:3650})});if(!r.ok)throw new Error('load reports');const result=await r.json();if(cloudAuthFailure(result))return false;longTermReports=Array.isArray(result)?result:[];reportsLoaded=true;renderReports();return true}catch{return false}
     }
     async function saveLongTermReport(entry){
       if(!sharedPinValue||isTestMode)return false;
-      try{const r=await fetch(SB_URL+'/rest/v1/rpc/save_shipping_cutoff_report',{method:'POST',headers:SB_HEADERS,body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:sharedPinValue,input_report_date:entry.date,input_summary:entry.summary,input_report_text:entry.text})});if(!r.ok)throw new Error('save report');reportsLoaded=false;await loadLongTermReports();return true}catch{return false}
+      try{const r=await fetch(SB_URL+'/rest/v1/rpc/save_shipping_cutoff_report',{method:'POST',headers:SB_HEADERS,body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:sharedPinValue,input_report_date:entry.date,input_summary:entry.summary,input_report_text:entry.text})});if(!r.ok)throw new Error('save report');const result=await r.json();if(cloudAuthFailure(result))return false;reportsLoaded=false;await loadLongTermReports();return true}catch{return false}
     }
     async function saveDailyReport(){
       collect();if(state.activeProductivitySession){state.productivitySessions=[...(state.productivitySessions||[]),productivityRecord(state.activeProductivitySession)].slice(-2000);state.activeProductivitySession=null}const text=reportText(),entry={date:state.date,text,summary:reportSummary(),savedAt:new Date().toISOString()};state.reports=[entry,...state.reports.filter(x=>x.date!==state.date)].slice(0,60);await saveState('shipping_daily_report');dailyReport.value=text;
@@ -799,8 +804,8 @@
     function closeManualGuide(){manualGuideView.hidden=true;document.body.classList.remove('usage-guide-open');window.scrollTo(0,manualGuideScrollY);usageGuideReturnFocus?.focus?.();usageGuideReturnFocus=null}
     manualGuidePage.addEventListener('touchstart',event=>{const touch=event.changedTouches[0];manualTouchStartX=touch.clientX;manualTouchStartY=touch.clientY},{passive:true});
     manualGuidePage.addEventListener('touchend',event=>{const touch=event.changedTouches[0];const dx=touch.clientX-manualTouchStartX;const dy=touch.clientY-manualTouchStartY;if(Math.abs(dx)>=55&&Math.abs(dx)>Math.abs(dy)*1.2)changeManualPage(dx<0?1:-1)},{passive:true});
-    async function unlockSharedPin(){const pin=sharedPin.value.trim();if(!/^\d{4}$/.test(pin)){authMessage.textContent='4桁の数字を入力してください。';return}authMessage.textContent='確認中…';if(await loadCloudState(pin)){authMessage.textContent='共有を開始しました。';closeLogin()}else authMessage.textContent='PINが違うか、クラウドの初回設定が未完了です。'}
-    async function bootstrapCloud(){if(isTestMode){setSync('テスト中');lastSyncText.textContent='クラウドへ保存しません';return}sharedPinValue=localStorage.getItem(PIN_SESSION)||'';if(sharedPinValue){if(await loadCloudState())closeLogin()}else setSync('PIN未認証')}
+    async function unlockSharedPin(){const pin=sharedPin.value.trim();if(!/^\d{4}$/.test(pin)){authMessage.textContent='4桁の数字を入力してください。';return}authMessage.textContent='確認中…';lastCloudAuthError=null;if(await loadCloudState(pin)){authMessage.textContent='共有を開始しました。';closeLogin()}else if(lastCloudAuthError?.code==='rate_limited'){const mins=Math.max(1,Math.ceil(lastCloudAuthError.retryAfterSeconds/60));authMessage.textContent=`PINの連続入力に失敗したため、約${mins}分後に再度お試しください。`}else authMessage.textContent='PINが違うか、クラウドの初回設定が未完了です。'}
+    async function bootstrapCloud(){if(isTestMode){setSync('テスト中');lastSyncText.textContent='クラウドへ保存しません';return}localStorage.removeItem(PIN_SESSION);sharedPinValue=sessionStorage.getItem(PIN_SESSION)||'';if(sharedPinValue){if(await loadCloudState())closeLogin()}else setSync('PIN未認証')}
     function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
     function setupMobileProgressNav(){
       const nav=document.querySelector('.mobile-progress-nav'),panel=document.getElementById('progressPanel'),activeWorkers=document.getElementById('activeWorkersPanel');
