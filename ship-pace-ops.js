@@ -6,7 +6,7 @@
   const opsIsoAt=time=>new Date(`${state.date}T${time}:00`).toISOString();
   const opsMinutesAt=iso=>{const d=new Date(iso);return d.getHours()*60+d.getMinutes()};
   const opsFormatDuration=mins=>`${Math.floor(mins/60)?Math.floor(mins/60)+'時間':''}${Math.round(mins%60)}分`;
-  let opsCompletionCandidate=null,opsCompletionQueue=[],opsScanner=null,opsScannerMode='attendance',opsLinkWorkerId='',opsLastScan=new Map(),opsProgressSaveBusy=false;
+  let opsCompletionCandidate=null,opsCompletionQueue=[],opsScanner=null,opsScannerMode='attendance',opsLinkWorkerId='',opsLastScan=new Map();
 
   function opsEnsureState(){
     state.workerMaster=Array.isArray(state.workerMaster)?state.workerMaster:[];
@@ -256,26 +256,20 @@
     return opsShowNextCompletionCandidate();
   }
   async function opsSaveSnapshot(){
-    if(opsProgressSaveBusy)return;
-    opsProgressSaveBusy=true;const saveButton=$('quickSaveButton');if(saveButton)saveButton.disabled=true;
-    try{
-      const input=$('quickCompleted'),raw=input.value.trim(),numeric=Number(raw),targetMinute=opsNextTarget();if(!Number.isFinite(targetMinute))return;
-      const showValidationError=message=>{$('quickResult').textContent=message;$('quickResult').scrollIntoView({behavior:'smooth',block:'center'});input.focus()};
-      if(raw===''||!Number.isFinite(numeric)||numeric<0||!Number.isInteger(numeric)){showValidationError('累計完了店舗数は、0以上の整数で入力してください。データは保存されていません。');return}
-      const requestedTotal=Math.round(numeric),previous=[...state.progressCheckpoints].filter(x=>Number(x.targetMinute)<targetMinute).sort((a,b)=>Number(a.targetMinute)-Number(b.targetMinute)).at(-1);
-      if(previous&&requestedTotal<Number(previous.totalCompleted)){showValidationError(`前回の累計${Number(previous.totalCompleted).toLocaleString()}店舗より小さい値は通常入力では保存できません。「例外修正：過去時刻・便を指定」を使用してください。`);return}
-      const plannedTotal=state.waves.reduce((sum,w)=>sum+Math.max(0,Number(w.planned)||0),0),unusualLimit=Math.max(10000,plannedTotal*10);
-      if(requestedTotal>unusualLimit&&!confirm(`累計${requestedTotal.toLocaleString()}店舗は計画${plannedTotal.toLocaleString()}店舗に対して非常に大きな値です。このまま保存しますか？`)){showValidationError('保存を取り消しました。既存データは変更されていません。');return}
-      const existed=Boolean(opsCheckpoint(targetMinute)),{totalCompleted,waveValues}=recordGlobalCheckpoint({totalCompleted:requestedTotal,targetMinute});
-      await saveState(existed?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').innerHTML=`<strong>${clock(targetMinute)}時点の累計${totalCompleted.toLocaleString()}店舗を保存しました</strong><p>対象時刻と方面別進捗を自動判定し、計画差・生産性・必要ペースを再計算しました。</p>`;$('quickResult').scrollIntoView({behavior:'smooth',block:'center'});
-      opsPromptReachedWaves(waveValues,targetMinute);
-    }finally{opsProgressSaveBusy=false;if(saveButton)saveButton.disabled=false}
+    const input=$('quickCompleted'),raw=input.value.trim(),numeric=Number(raw),targetMinute=opsNextTarget();if(!Number.isFinite(targetMinute))return;
+    const showValidationError=message=>{$('quickResult').textContent=message;$('quickResult').scrollIntoView({behavior:'smooth',block:'center'});input.focus()};
+    if(raw===''||!Number.isFinite(numeric)||numeric<0||!Number.isInteger(numeric)){showValidationError('累計完了店舗数は、0以上の整数で入力してください。データは保存されていません。');return}
+    const requestedTotal=Math.round(numeric),previous=[...state.progressCheckpoints].filter(x=>Number(x.targetMinute)<targetMinute).sort((a,b)=>Number(a.targetMinute)-Number(b.targetMinute)).at(-1);
+    if(previous&&requestedTotal<Number(previous.totalCompleted)){showValidationError(`前回の累計${Number(previous.totalCompleted).toLocaleString()}店舗より小さい値は通常入力では保存できません。「例外修正：過去時刻・便を指定」を使用してください。`);return}
+    const plannedTotal=state.waves.reduce((sum,w)=>sum+Math.max(0,Number(w.planned)||0),0),unusualLimit=Math.max(10000,plannedTotal*10);
+    if(requestedTotal>unusualLimit&&!confirm(`累計${requestedTotal.toLocaleString()}店舗は計画${plannedTotal.toLocaleString()}店舗に対して非常に大きな値です。このまま保存しますか？`)){showValidationError('保存を取り消しました。既存データは変更されていません。');return}
+    const existed=Boolean(opsCheckpoint(targetMinute)),{totalCompleted,waveValues}=recordGlobalCheckpoint({totalCompleted:requestedTotal,targetMinute});
+    await saveState(existed?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').innerHTML=`<strong>${clock(targetMinute)}時点の累計${totalCompleted.toLocaleString()}店舗を保存しました</strong><p>対象時刻と方面別進捗を自動判定し、計画差・生産性・必要ペースを再計算しました。</p>`;$('quickResult').scrollIntoView({behavior:'smooth',block:'center'});
+    opsPromptReachedWaves(waveValues,targetMinute);
   }
   saveQuickProgress=opsSaveSnapshot;
   async function saveManualWaveProgress(){
-    const input=$('manualWaveCompleted'),raw=input.value.trim(),numeric=Number(raw),id=$('quickWave').value,item=state.waves.find(x=>x.id===id),targetMinute=Number($('progressTargetTime').value);if(!item||!Number.isFinite(targetMinute))return;
-    if(raw===''||!Number.isFinite(numeric)||numeric<0||!Number.isInteger(numeric)){$('quickResult').textContent='例外修正の累計完了店舗数は、0以上の整数で入力してください。データは保存されていません。';input.focus();return}
-    const completed=Math.round(numeric);
+    const id=$('quickWave').value,item=state.waves.find(x=>x.id===id),completed=Math.max(0,Math.round(Number($('manualWaveCompleted').value)||0)),targetMinute=Number($('progressTargetTime').value);if(!item||!Number.isFinite(targetMinute))return;
     const existed=Boolean(opsCheckpoint(targetMinute)),{checkpoint}=recordProgressCheckpoint({id,completed,targetMinute,source:'manual_wave_correction'});await saveState(existed?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').innerHTML=`<strong>${clock(targetMinute)}時点の${escapeHtml(item.area)}を${completed.toLocaleString()}店舗へ修正しました</strong><p>関連する時間帯実績・人時・生産性を再計算しました。</p>`;opsPromptReachedWaves(checkpoint.waveValues,targetMinute);
   }
   window.saveManualWaveProgress=saveManualWaveProgress;
