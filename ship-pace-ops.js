@@ -6,7 +6,7 @@
   const opsIsoAt=time=>new Date(`${state.date}T${time}:00`).toISOString();
   const opsMinutesAt=iso=>{const d=new Date(iso);return d.getHours()*60+d.getMinutes()};
   const opsFormatDuration=mins=>`${Math.floor(mins/60)?Math.floor(mins/60)+'時間':''}${Math.round(mins%60)}分`;
-  let opsCompletionCandidate=null,opsCompletionQueue=[],opsScanner=null,opsScannerMode='attendance',opsLinkWorkerId='',opsLastScan=new Map(),opsProgressSaveBusy=false;
+  let opsCompletionCandidate=null,opsCompletionQueue=[],opsScanner=null,opsScannerMode='attendance',opsLinkWorkerId='',opsLastScan=new Map(),opsProgressSaveBusy=false,opsAllCompleteAt=null;
 
   function opsEnsureState(){
     state.workerMaster=Array.isArray(state.workerMaster)?state.workerMaster:[];
@@ -64,13 +64,14 @@
   }
   function opsHumanMinutes(start,end){return opsStaffingSegments(start,end).reduce((sum,x)=>sum+x.minutes*x.count,0)}
 
+  function opsCloseWorkerSession(session,at,source){session.endAt=at.toISOString();session.endSource=source}
   async function opsSetWorkerActive(workerId,active,source='barcode'){
     opsEnsureState();const worker=opsWorker(workerId);if(!worker)return;
     const now=new Date(),session=state.workerSessions.find(s=>s.workerId===workerId&&!s.endAt);
     if(active&&session){$('attendanceMessage').textContent=`${worker.name}さんはすでに作業中です。`;return}
     if(!active&&!session){$('attendanceMessage').textContent=`${worker.name}さんは現在作業中ではありません。`;return}
     if(active)state.workerSessions.push({id:opsUuid(),workerId,startAt:now.toISOString(),endAt:null,startSource:source});
-    else{session.endAt=now.toISOString();session.endSource=source}
+    else opsCloseWorkerSession(session,now,source);
     opsRecordStaffing(now.toISOString(),source);
     state.workers=shipPaceCurrentWorkerCount();state.effectiveTime=clock(nowMinutes());
     await saveState(active?'shipping_worker_start':'shipping_worker_end');
@@ -79,6 +80,19 @@
   async function toggleWorkerAttendance(workerId,source='manual'){const active=Boolean(state.workerSessions.find(s=>s.workerId===workerId&&!s.endAt));await opsSetWorkerActive(workerId,!active,source)}
   window.toggleWorkerAttendance=toggleWorkerAttendance;
   window.endActiveWorker=id=>opsSetWorkerActive(id,false,'manual_end');
+
+  function opsAllPlannedWavesComplete(){const planned=state.waves.filter(w=>Number(w.planned)>0);return planned.length>0&&planned.every(w=>Boolean(w.completedAt))}
+  function opsPromptAllWorkersEnd(completedAt){
+    const at=new Date(completedAt||Date.now()),active=opsActiveSessions(at);if(!opsAllPlannedWavesComplete()||!active.length)return false;
+    opsAllCompleteAt=at.toISOString();$('allWorkersEndCount').textContent=String(active.length);$('allWorkersEndModal').classList.add('open');return true;
+  }
+  async function confirmEndAllWorkers(){
+    const at=new Date(opsAllCompleteAt||Date.now()),active=opsActiveSessions(at);active.forEach(session=>opsCloseWorkerSession(session,at,'all_complete'));
+    opsRecordStaffing(at.toISOString(),'all_complete');state.workers=shipPaceCurrentWorkerCount(new Date(at.getTime()+1));state.effectiveTime=clock(opsMinutesAt(at));opsAllCompleteAt=null;$('allWorkersEndModal').classList.remove('open');
+    await saveState('shipping_worker_end');$('attendanceMessage').textContent=`本日の全便完了時刻で${active.length}名の作業を終了しました。現在${shipPaceCurrentWorkerCount()}名です。`;
+  }
+  function continueActiveWorkers(){opsAllCompleteAt=null;$('allWorkersEndModal').classList.remove('open');$('attendanceMessage').textContent='作業を継続します。終了時はバーコードまたは「終了」を使用してください。'}
+  window.confirmEndAllWorkers=confirmEndAllWorkers;window.continueActiveWorkers=continueActiveWorkers;
 
   function renderActiveWorkers(){
     const active=opsActiveSessions(),effective=shipPaceCurrentWorkerCount(),list=$('activeWorkerList'),manualDifference=effective-active.length;$('activeWorkerCount').textContent=`${effective}名`;
@@ -193,12 +207,21 @@
     const productive=workingMinutes(start.targetMinute,end.targetMinute),processed=Math.max(0,Number(end.totalCompleted)-Number(start.totalCompleted));
     return productive>0&&processed>0?processed/(productive/60):0;
   }
+  function opsForecastPendingReason(){
+    const checkpoints=[...state.progressCheckpoints].sort((a,b)=>a.targetMinute-b.targetMinute);
+    if(!checkpoints.length)return'実績蓄積中：初回進捗待ち';
+    const end=checkpoints.at(-1),start=checkpoints.length>1?checkpoints.at(-2):{targetMinute:minutes(state.operationStart||'09:30'),totalCompleted:0},processed=Number(end.totalCompleted)-Number(start.totalCompleted),productive=workingMinutes(start.targetMinute,end.targetMinute);
+    if(processed<0)return'実績蓄積中：進捗データ要確認';
+    if(productive<=0)return'実績蓄積中：有効作業時間なし';
+    if(processed===0)return'実績蓄積中：最新区間の処理実績なし';
+    return'実績蓄積中';
+  }
   function goToProgressTarget(target){$('progressTargetTime').value=String(target);renderProgressTiming();$('progressPanel').scrollIntoView({behavior:'smooth',block:'start'})}
   window.goToProgressTarget=goToProgressTarget;
   function renderDashboard(){
     const rows=groupedRows(),latest=opsLatestCheckpoint(),firstTarget=opsTargetMinutes()[0]??minutes(state.operationStart||'09:30'),target=latest?.targetMinute??firstTarget,actual=latest?.totalCompleted??0,plan=opsPlanCumulativeAt(target),diff=actual-plan,human=opsHumanMinutes(new Date(opsTargetIso(minutes(state.operationStart||'09:30'))),new Date(opsTargetIso(target))),productivity=latest&&human?actual/(human/60):null,current=shipPaceCurrentWorkerCount(),pending=rows.filter(x=>x.item.planned>0&&!x.item.completedAt),finalPending=pending.at(-1),requirement=totalOperationalRequirement(rows,nowMinutes(),current),required=requirement.requiredWorkers,action=requirement.action;
-    let finish=requirement.status==='complete'?'本日の作業は完了':requirement.status==='overdue'?'締切超過':pending.length?'実績蓄積中':'本日の便は完了';if(requirement.status==='active'&&finalPending){const rate=opsGlobalActualRate(),remaining=requirement.remaining,forecast=rate?finishAtRate(nowMinutes(),remaining,rate):null;if(forecast!==null){const delta=forecast-finalPending.deadline;finish=Math.abs(delta)<=2?'予定どおり完了見込み':`予定より約${Math.abs(delta)}分${delta<0?'早く':'遅れて'}完了見込み`}}
-    const nextTarget=opsNextTarget(),cp=opsCheckpoint(nextTarget),tone=diff>0?'ahead':diff<0?'behind':'on-plan',requirementText=requirement.status==='overdue'?'算出対象外':`${required??0}名`,requirementDetail=requirement.status==='overdue'?`${requirement.detail}。残作業を確認してください。`:action;$('currentProgressDashboard').innerHTML=`<div class="ops-dashboard-head"><div><div class="eyebrow">CURRENT PROGRESS</div><h2>現在の進捗</h2></div><span class="ops-asof">${latest?clock(target)+'時点':'実績待ち'}</span></div><div class="ops-variance ${tone}">${opsDiffLabel(diff,'計画')}</div><div class="ops-dashboard-grid"><div class="ops-kpi ops-kpi-plan"><small>計画｜実績（店舗）</small><strong>${plan.toLocaleString()}｜${actual.toLocaleString()}</strong></div><div class="ops-kpi"><small>累計 全体生産性</small><strong>${productivity===null?'実績待ち':productivity.toFixed(1)+' 店舗/人時'}</strong></div><div class="ops-kpi"><small>完了見込み</small><strong>${finish}</strong></div><div class="ops-kpi"><small>現在人数｜必要人数</small><strong>${current}名｜${requirementText}</strong></div><div class="ops-kpi"><small>最新の進捗入力</small><strong>${cp?'✓ 入力済み':nextTarget<=nowMinutes()?'⚠ 未入力':'― これから'}</strong></div></div><div class="ops-action ${requirement.status==='overdue'||requirement.gap>0?'warn':''}">${requirementDetail}</div>`;
+    let finish=requirement.status==='complete'?'本日の作業は完了':requirement.status==='overdue'?'締切超過':pending.length?opsForecastPendingReason():'本日の便は完了';if(requirement.status==='active'&&finalPending){const rate=opsGlobalActualRate(),remaining=requirement.remaining,forecast=rate?finishAtRate(nowMinutes(),remaining,rate):null;if(forecast!==null){const delta=forecast-finalPending.deadline;finish=Math.abs(delta)<=2?'予定どおり完了見込み':`予定より約${Math.abs(delta)}分${delta<0?'早く':'遅れて'}完了見込み`}}
+    const nextTarget=opsNextTarget(),cp=opsCheckpoint(nextTarget),latestProgress=latest?`${clock(latest.targetMinute)}時点・累計${Number(latest.totalCompleted).toLocaleString()}店舗`:'まだありません',tone=diff>0?'ahead':diff<0?'behind':'on-plan',requirementText=requirement.status==='overdue'?'算出対象外':`${required??0}名`,requirementDetail=requirement.status==='overdue'?`${requirement.detail}。残作業を確認してください。`:action;$('currentProgressDashboard').innerHTML=`<div class="ops-dashboard-head"><div><div class="eyebrow">CURRENT PROGRESS</div><h2>現在の進捗</h2></div><span class="ops-asof">${latest?clock(target)+'時点':'実績待ち'}</span></div><div class="ops-variance ${tone}">${opsDiffLabel(diff,'計画')}</div><div class="ops-dashboard-grid"><div class="ops-kpi ops-kpi-plan"><small>計画｜実績（店舗）</small><strong>${plan.toLocaleString()}｜${actual.toLocaleString()}</strong></div><div class="ops-kpi"><small>累計 全体生産性</small><strong>${productivity===null?'実績待ち':productivity.toFixed(1)+' 店舗/人時'}</strong></div><div class="ops-kpi"><small>完了見込み</small><strong>${finish}</strong></div><div class="ops-kpi"><small>現在人数｜必要人数</small><strong>${current}名｜${requirementText}</strong></div><div class="ops-kpi"><small>次に入力が必要な進捗</small><strong>${clock(nextTarget)}　${cp?'✓ 入力済み':nextTarget<=nowMinutes()?'⚠ 未入力':'― これから'}</strong><small class="ops-kpi-note">最新の有効な進捗：${latestProgress}</small></div></div><div class="ops-action ${requirement.status==='overdue'||requirement.gap>0?'warn':''}">${requirementDetail}</div>`;
   }
 
   function opsCorrectPaceCards(){
@@ -276,6 +299,8 @@
     const input=$('manualWaveCompleted'),raw=input.value.trim(),numeric=Number(raw),id=$('quickWave').value,item=state.waves.find(x=>x.id===id),targetMinute=Number($('progressTargetTime').value);if(!item||!Number.isFinite(targetMinute))return;
     if(raw===''||!Number.isFinite(numeric)||numeric<0||!Number.isInteger(numeric)){$('quickResult').textContent='例外修正の累計完了店舗数は、0以上の整数で入力してください。データは保存されていません。';input.focus();return}
     const completed=Math.round(numeric);
+    const laterConflict=[...state.progressCheckpoints].filter(x=>Number(x.targetMinute)>targetMinute&&x.waveValues&&x.waveValues[id]!==undefined&&completed>Number(x.waveValues[id])).sort((a,b)=>Number(a.targetMinute)-Number(b.targetMinute))[0];
+    if(laterConflict&&!confirm(`修正後の累計${completed.toLocaleString()}店舗が、後続の${clock(Number(laterConflict.targetMinute))}時点の累計${Number(laterConflict.waveValues[id]).toLocaleString()}店舗を上回っています。後続の進捗も確認してください。このまま保存しますか？`)){$('quickResult').textContent='例外修正を取り消しました。後続の進捗と既存データは変更されていません。';input.focus();return}
     const existed=Boolean(opsCheckpoint(targetMinute)),{checkpoint}=recordProgressCheckpoint({id,completed,targetMinute,source:'manual_wave_correction'});await saveState(existed?'shipping_snapshot_edit':'shipping_interval_progress');$('quickResult').innerHTML=`<strong>${clock(targetMinute)}時点の${escapeHtml(item.area)}を${completed.toLocaleString()}店舗へ修正しました</strong><p>関連する時間帯実績・人時・生産性を再計算しました。</p>`;opsPromptReachedWaves(checkpoint.waveValues,targetMinute);
   }
   window.saveManualWaveProgress=saveManualWaveProgress;
@@ -285,7 +310,7 @@
 
   saveStartSettings=async function(){const next=operationStart.value||'09:30';state.operationStart=next;state.effectiveTime=next;opsRebuildStaffingTimeline();await saveState('shipping_start_change');workerMessage.textContent=`今日の計画開始を${next}に設定しました。作業者の人時は実際の参加時刻から計算します。`};
   applyWorkers=async function(){const requested=Math.max(0,Number(workerChangeCount.value)||0),time=workerTime.value||clock(nowMinutes()),at=opsIsoAt(time),activeCount=opsActiveSessions(new Date(at)).length,count=Math.max(requested,activeCount);state.workers=count;state.effectiveTime=time;if(changeRateToggle.checked)state.onePersonRate=Math.max(1,Number(changeOnePersonRate.value)||state.onePersonRate);state.workerChanges.push({time,workers:count,requestedWorkers:requested,onePersonRate:state.onePersonRate,operationStart:state.operationStart,kind:'manual_override',rateChanged:changeRateToggle.checked,savedAt:new Date().toISOString()});opsRecordStaffing(at,'manual_override',count,opsActiveIds(new Date(at)));await saveState('shipping_worker_change');workerMessage.textContent=requested<activeCount?`現在${activeCount}名が作業中のため、${time}から${activeCount}名として保存しました。人数を減らす場合は、対象作業者の「終了」を押してください。`:`非常用修正：${time}から${count}名として人数タイムラインを修正しました。バーコード人数との二重計上はありません。`};
-  const opsLegacyCompleteWave=completeWave;completeWave=async function(id){state.completionDismissals=state.completionDismissals.filter(x=>x.waveId!==id);forgetDeferredCompletion(id);await opsLegacyCompleteWave(id);render()};
+  const opsLegacyCompleteWave=completeWave;completeWave=async function(id){state.completionDismissals=state.completionDismissals.filter(x=>x.waveId!==id);forgetDeferredCompletion(id);await opsLegacyCompleteWave(id);const completedAt=state.waves.find(x=>x.id===id)?.completedAt;render();if(completedAt)opsPromptAllWorkersEnd(completedAt)};
   resetToday=async function(){if(!confirm('本日の完了店舗数・完了時刻・作業者記録をリセットしますか？'))return;state.waves.forEach(x=>{x.completed=0;x.completedAt=null});state.progressSnapshots=[];state.progressCheckpoints=[];state.workerSessions=[];state.staffingTimeline=[];state.completionDismissals=[];clearDeferredCompletionGuards();state.productivitySessions=(state.productivitySessions||[]).filter(x=>x.date!==state.date);state.activeProductivitySession=null;await saveState('shipping_reset');saveMessage.textContent='本日の実績・作業者・人数・進捗スナップショットをリセットしました。'};
 
   const opsLegacyReportText=reportText;reportText=function(){const latest=opsLatestCheckpoint(),human=latest?opsHumanMinutes(new Date(opsTargetIso(minutes(state.operationStart||'09:30'))),new Date(latest.targetAt)):0,allocation=opsPerformanceAllocation();return `${opsLegacyReportText()}\n\n【統合進捗】\n最新対象時刻 ${latest?clock(latest.targetMinute):'未入力'}\n累計全体生産性 ${latest&&human?(latest.totalCompleted/(human/60)).toFixed(1):'0.0'}店舗/人時\n現在作業中 ${shipPaceCurrentWorkerCount()}名\n時間帯進捗 ${state.progressCheckpoints.length}件\n共同作業区間 ${allocation.joint.length}件`};

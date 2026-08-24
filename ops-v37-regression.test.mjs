@@ -377,3 +377,82 @@ test('詳しい操作ガイドは8枚の画像をSHIP PACE内でページ送り�
     assert.deepEqual([...image.subarray(0,3)],[0xff,0xd8,0xff]);
   }
 });
+
+test('v1.0.2: 上部は次に必要な入力と最新の有効進捗を分けて表示する',()=>{
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  assert.match(js,/次に入力が必要な進捗/u);
+  assert.match(js,/最新の有効な進捗：\$\{latestProgress\}/u);
+  assert.match(js,/latestProgress=latest\?`\$\{clock\(latest\.targetMinute\)\}時点・累計/u);
+  assert.doesNotMatch(js,/<small>最新の進捗入力<\/small>/u);
+});
+
+test('v1.0.2: 完了見込みの算出不能理由を4状態で短く表示する',()=>{
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  for(const reason of ['初回進捗待ち','最新区間の処理実績なし','有効作業時間なし','進捗データ要確認'])assert.match(js,new RegExp(reason,'u'));
+  assert.match(js,/pending\.length\?opsForecastPendingReason\(\)/u);
+  assert.match(js,/if\(forecast!==null\)/u);
+});
+
+test('v1.0.2: 全便完了でも作業者0名なら終了確認を表示しない',()=>{
+  const shouldPrompt=(planned,active)=>planned.length>0&&planned.every(Boolean)&&active>0;
+  assert.equal(shouldPrompt([true,true],0),false);
+  assert.equal(shouldPrompt([],2),false);
+});
+
+test('v1.0.2: 全便完了時は作業者1名・複数名のどちらも終了確認する',()=>{
+  const shouldPrompt=(planned,active)=>planned.length>0&&planned.every(Boolean)&&active>0;
+  assert.equal(shouldPrompt([true,true],1),true);
+  assert.equal(shouldPrompt([true,true,true],3),true);
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
+  assert.match(html,/現在作業中の<span id="allWorkersEndCount">0<\/span>名を終了しますか/u);
+});
+
+test('v1.0.2: 全員終了は全便完了時刻と既存共通終了処理を使用する',()=>{
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  assert.match(js,/function opsCloseWorkerSession\(session,at,source\)/u);
+  assert.match(js,/active\.forEach\(session=>opsCloseWorkerSession\(session,at,'all_complete'\)\)/u);
+  assert.match(js,/opsAllCompleteAt=at\.toISOString\(\)/u);
+  assert.match(js,/opsRecordStaffing\(at\.toISOString\(\),'all_complete'\)/u);
+});
+
+test('v1.0.2: 作業継続では作業者セッションを終了しない',()=>{
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  const block=js.match(/function continueActiveWorkers\(\)\{[^}]+\}/u)?.[0]||'';
+  assert.match(block,/作業を継続します/u);
+  assert.doesNotMatch(block,/opsCloseWorkerSession|endAt|saveState/u);
+});
+
+test('v1.0.2: 休憩中の全便完了でも終了時刻を完了時刻で固定し休憩除外は維持する',()=>{
+  const productive=(start,end,breakStart,breakEnd)=>(end-start)-Math.max(0,Math.min(end,breakEnd)-Math.max(start,breakStart));
+  assert.equal(productive(11*60+45,12*60+30,12*60,13*60),15);
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  assert.match(js,/const completedAt=state\.waves\.find\(x=>x\.id===id\)\?\.completedAt;render\(\);if\(completedAt\)opsPromptAllWorkersEnd\(completedAt\)/u);
+  assert.match(js,/state\.breaks\.forEach/u);
+});
+
+test('v1.0.2: 例外修正が後続累計を上回ると警告し取消時は保存しない',()=>{
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  const block=js.match(/async function saveManualWaveProgress\(\)\{[\s\S]*?\n  \}/u)?.[0]||'';
+  assert.match(block,/laterConflict=/u);
+  assert.match(block,/後続の進捗も確認してください/u);
+  assert.match(block,/if\(laterConflict&&!confirm/u);
+  assert.match(block,/return\}[\s\S]*?recordProgressCheckpoint/u);
+});
+
+test('v1.0.2: 正常な例外修正は警告なしで従来の再計算へ進む',()=>{
+  const hasConflict=(current,target,completed)=>current.some(x=>x.targetMinute>target&&completed>x.value);
+  assert.equal(hasConflict([{targetMinute:660,value:80}],600,70),false);
+  assert.equal(hasConflict([{targetMinute:660,value:80}],600,90),true);
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  assert.match(js,/recordProgressCheckpoint\(\{id,completed,targetMinute,source:'manual_wave_correction'\}\)/u);
+  assert.match(js,/関連する時間帯実績・人時・生産性を再計算しました/u);
+});
+
+test('v1.0.2: 完了確認は既存完了処理を経由し個別終了・保存形式を維持する',()=>{
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  const endAllBlock=js.match(/async function confirmEndAllWorkers\(\)\{[\s\S]*?\n  \}/u)?.[0]||'';
+  assert.match(js,/await completeWave\(candidate\.waveId\)/u);
+  assert.match(js,/window\.endActiveWorker=id=>opsSetWorkerActive\(id,false,'manual_end'\)/u);
+  assert.match(js,/await saveState\('shipping_worker_end'\)/u);
+  assert.doesNotMatch(endAllBlock,/state\.workerSessions=\[\]/u);
+});
