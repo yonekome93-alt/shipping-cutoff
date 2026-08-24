@@ -386,6 +386,36 @@ test('v1.0.2: 上部は次に必要な入力と最新の有効進捗を分けて
   assert.doesNotMatch(js,/<small>最新の進捗入力<\/small>/u);
 });
 
+test('v1.0.2: 当日の全対象時刻が入力済みなら進捗入力完了と表示する',()=>{
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  const allEntered=(targets,entered)=>targets.length>0&&targets.every(target=>entered.includes(target));
+  assert.equal(allEntered([600,660,720],[600,660,720]),true);
+  assert.equal(allEntered([600,660,720],[600,660]),false);
+  assert.equal(allEntered([],[]),false);
+  assert.match(js,/allProgressEntered=progressTargets\.length>0&&progressTargets\.every\(t=>Boolean\(opsCheckpoint\(t\)\)\)/u);
+  assert.match(js,/allProgressEntered\?'本日の進捗入力は完了'/u);
+  assert.match(js,/<strong>\$\{progressInputStatus\}<\/strong>/u);
+});
+
+test('v1.0.2: 不正時刻と非有限の必要人数をNaN表示せず安全に扱う',()=>{
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  const isValidTime=value=>typeof value==='string'&&/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+  const normalizeTime=(value,fallback='09:30')=>isValidTime(value)?value:(isValidTime(fallback)?fallback:'09:30');
+  const workerLabel=value=>Number.isFinite(value)?`${value}名`:'算出不可';
+  assert.equal(normalizeTime('10:05'),'10:05');
+  assert.equal(normalizeTime(85),'09:30');
+  assert.equal(normalizeTime('25:10'),'09:30');
+  assert.equal(workerLabel(2),'2名');
+  assert.equal(workerLabel(Number.NaN),'算出不可');
+  assert.equal(workerLabel(Number.POSITIVE_INFINITY),'算出不可');
+  assert.ok(html.includes("const isValidTime=value=>"));
+  assert.ok(html.includes("cutoff:normalizeTime(prev.cutoff,x.cutoff)"));
+  assert.ok(html.includes("status:'unavailable'"));
+  assert.ok(html.includes('必要人数：算出不可'));
+  assert.ok(js.includes("Number.isFinite(required)?`${required}名`:'算出不可'"));
+});
+
 test('v1.0.2: 完了見込みの算出不能理由を4状態で短く表示する',()=>{
   const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
   for(const reason of ['初回進捗待ち','最新区間の処理実績なし','有効作業時間なし','進捗データ要確認'])assert.match(js,new RegExp(reason,'u'));
