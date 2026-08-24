@@ -157,7 +157,7 @@
       <div class="section-head"><div><h2 id="progressTitle">進捗入力</h2><p>SHIP PACEが対象時刻と便を自動判定します。通常は今日全体の累計店舗数だけ入力してください。</p></div></div>
       <div class="quick-grid">
         <label>今日全体の累計完了店舗数<input id="quickCompleted" type="number" min="0" value="0" inputmode="numeric"></label>
-        <button class="primary" onclick="saveQuickProgress()">進捗を保存</button>
+        <button id="quickSaveButton" class="primary" onclick="saveQuickProgress()">進捗を保存</button>
       </div>
       <div id="progressTimingMessage" class="late-note"></div>
       <div id="quickResult" class="worker-result"></div>
@@ -266,6 +266,7 @@
     const VOICE_KEY='shipping-cutoff-voice';
     const NOTIFICATION_KEY='shipping-cutoff-notification';
     const COMPLETION_GUARD_KEY='shipping-cutoff-deferred-completions-v1';
+    const PENDING_SYNC_KEY='shipping-cutoff-pending-sync-v1';
     const SB_URL='https://ygbxyejhfeieqhgdymys.supabase.co';
     const SB_KEY='sb_publishable_kQvjwG8nKu1YGM_3qlZ-Vg_ok3jlvIW';
     const SB_HEADERS={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
@@ -279,6 +280,9 @@
     let notificationEnabled=localStorage.getItem(NOTIFICATION_KEY)!=='0';
     let spokenAlerts=new Set(),notifiedAlerts=new Set();
     const deviceId=localStorage.getItem(DEVICE_ID_KEY)||((crypto.randomUUID?.()||String(Date.now())));localStorage.setItem(DEVICE_ID_KEY,deviceId);
+    const pendingSync=()=>{try{return JSON.parse(localStorage.getItem(PENDING_SYNC_KEY)||'null')}catch{return null}};
+    const markPendingSync=changeType=>localStorage.setItem(PENDING_SYNC_KEY,JSON.stringify({changeType,at:new Date().toISOString()}));
+    const clearPendingSync=()=>localStorage.removeItem(PENDING_SYNC_KEY);
     const defaults=[
       {id:'kyushu-am',area:'九州①',cutoff:'10:00'},{id:'okinawa',area:'沖縄',cutoff:'11:00'},
       {id:'shikoku',area:'四国',cutoff:'12:00'},{id:'chugoku',area:'中国',cutoff:'12:00'},
@@ -572,7 +576,7 @@
         if(remote?.syncRevision&&lastCloudRevision&&remote.syncRevision!==lastCloudRevision){saveConflict=true;conflictBox.hidden=false;setSync('更新競合','error');return false}
         const revision=`${Date.now()}-${Math.random().toString(36).slice(2,8)}`,clientTime=new Date().toISOString(),payload={...state,changeType,cloudUpdatedAt:clientTime,syncRevision:revision,syncDevice:deviceId};
         const r=await fetch(SB_URL+'/rest/v1/rpc/save_shipping_cutoff_state',{method:'POST',headers:SB_HEADERS,body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:sharedPinValue,input_data:payload,input_expected_revision:lastCloudRevision||''})});
-        if(!r.ok){const detail=await r.json().catch(()=>({}));if(detail.code==='40001'||String(detail.message||'').includes('conflict')){saveConflict=true;conflictBox.hidden=false;setSync('更新競合','error');return false}throw new Error('save')}const result=await r.json();if(cloudAuthFailure(result))return false;state.syncRevision=revision;state.syncDevice=deviceId;lastCloudRevision=revision;cloudUpdatedAt=result?.updated_at||clientTime;lastSyncText.textContent=`最終共有 ${new Date(cloudUpdatedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`;setSync('共有済み','ok');persist();return true
+        if(!r.ok){const detail=await r.json().catch(()=>({}));if(detail.code==='40001'||String(detail.message||'').includes('conflict')){saveConflict=true;conflictBox.hidden=false;setSync('更新競合','error');return false}throw new Error('save')}const result=await r.json();if(cloudAuthFailure(result))return false;state.syncRevision=revision;state.syncDevice=deviceId;lastCloudRevision=revision;cloudUpdatedAt=result?.updated_at||clientTime;lastSyncText.textContent=`最終共有 ${new Date(cloudUpdatedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`;setSync('共有済み','ok');clearPendingSync();persist();return true
       }catch(e){setSync('共有エラー','error');return false}finally{cloudBusy=false}
     }
     async function loadCloudState(pin=sharedPinValue,{background=false}={}){
@@ -606,7 +610,8 @@
         state.undoStack=[...(state.undoStack||[]),{at:new Date().toISOString(),label:changeLabels[changeType]||'データ変更',snapshot:snapshotState(lastStableState)}].slice(-20);
         state.auditLog=[...(state.auditLog||[]),{id:crypto.randomUUID?.()||String(Date.now()),at:new Date().toISOString(),label:changeLabels[changeType]||'データ変更',type:changeType,mode:isTestMode?'test':'production'}].slice(-100);
       }
-      formDirty=false;persist();render();const saved=await saveCloudState(changeType);if(saved||isTestMode)lastStableState=JSON.parse(JSON.stringify(state));return saved
+      if(!isTestMode&&sharedPinValue)markPendingSync(changeType);
+      formDirty=false;persist();render();const saved=await saveCloudState(changeType);if(saved||isTestMode)lastStableState=JSON.parse(JSON.stringify(state));else if(sharedPinValue)formDirty=true;return saved
     }
     async function resolveConflict(){await loadCloudState();saveMessage.textContent='最新の共有データを読み込みました。もう一度入力してください。'}
     async function undoLastChange(){
@@ -804,8 +809,9 @@
     function closeManualGuide(){manualGuideView.hidden=true;document.body.classList.remove('usage-guide-open');window.scrollTo(0,manualGuideScrollY);usageGuideReturnFocus?.focus?.();usageGuideReturnFocus=null}
     manualGuidePage.addEventListener('touchstart',event=>{const touch=event.changedTouches[0];manualTouchStartX=touch.clientX;manualTouchStartY=touch.clientY},{passive:true});
     manualGuidePage.addEventListener('touchend',event=>{const touch=event.changedTouches[0];const dx=touch.clientX-manualTouchStartX;const dy=touch.clientY-manualTouchStartY;if(Math.abs(dx)>=55&&Math.abs(dx)>Math.abs(dy)*1.2)changeManualPage(dx<0?1:-1)},{passive:true});
-    async function unlockSharedPin(){const pin=sharedPin.value.trim();if(!/^\d{4}$/.test(pin)){authMessage.textContent='4桁の数字を入力してください。';return}authMessage.textContent='確認中…';lastCloudAuthError=null;if(await loadCloudState(pin)){authMessage.textContent='共有を開始しました。';closeLogin()}else if(lastCloudAuthError?.code==='rate_limited'){const mins=Math.max(1,Math.ceil(lastCloudAuthError.retryAfterSeconds/60));authMessage.textContent=`PINの連続入力に失敗したため、約${mins}分後に再度お試しください。`}else authMessage.textContent='PINが違うか、クラウドの初回設定が未完了です。'}
-    async function bootstrapCloud(){if(isTestMode){setSync('テスト中');lastSyncText.textContent='クラウドへ保存しません';return}localStorage.removeItem(PIN_SESSION);sharedPinValue=sessionStorage.getItem(PIN_SESSION)||'';if(sharedPinValue){if(await loadCloudState())closeLogin()}else setSync('PIN未認証')}
+    async function resumePendingSync(pin){sharedPinValue=pin;lastCloudRevision=state.syncRevision||'';const pending=pendingSync(),saved=pending?await saveCloudState(pending.changeType||'shipping_update'):await loadCloudState(pin);if(saved)sessionStorage.setItem(PIN_SESSION,pin);return saved}
+    async function unlockSharedPin(){const pin=sharedPin.value.trim();if(!/^\d{4}$/.test(pin)){authMessage.textContent='4桁の数字を入力してください。';return}authMessage.textContent='確認中…';lastCloudAuthError=null;if(await resumePendingSync(pin)){authMessage.textContent='共有を開始しました。';closeLogin()}else if(lastCloudAuthError?.code==='rate_limited'){const mins=Math.max(1,Math.ceil(lastCloudAuthError.retryAfterSeconds/60));authMessage.textContent=`PINの連続入力に失敗したため、約${mins}分後に再度お試しください。`}else authMessage.textContent=pendingSync()?'未共有データを端末に保持しています。通信を確認して再度お試しください。':'PINが違うか、クラウドの初回設定が未完了です。'}
+    async function bootstrapCloud(){if(isTestMode){setSync('テスト中');lastSyncText.textContent='クラウドへ保存しません';return}localStorage.removeItem(PIN_SESSION);sharedPinValue=sessionStorage.getItem(PIN_SESSION)||'';if(sharedPinValue){if(await resumePendingSync(sharedPinValue))closeLogin()}else setSync(pendingSync()?'未共有データあり':'PIN未認証',pendingSync()?'error':'')}
     function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
     function setupMobileProgressNav(){
       const nav=document.querySelector('.mobile-progress-nav'),panel=document.getElementById('progressPanel'),activeWorkers=document.getElementById('activeWorkersPanel');

@@ -64,6 +64,40 @@ test('High修正: 共通PINはサーバー側で5回失敗後15分停止し、�
   assert.match(html,/__shipPaceAuthError/u);
 });
 
+test('v1.0.1候補: 通信失敗後は未共有印を保持し、再読込時にローカル状態を先に再送する',()=>{
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
+  assert.match(html,/const PENDING_SYNC_KEY='shipping-cutoff-pending-sync-v1'/u);
+  assert.match(html,/markPendingSync\(changeType\)/u);
+  assert.match(html,/else if\(sharedPinValue\)formDirty=true/u);
+  assert.match(html,/clearPendingSync\(\);persist\(\);return true/u);
+  assert.match(html,/async function resumePendingSync\(pin\)[\s\S]*?pending\?await saveCloudState\(pending\.changeType\|\|'shipping_update'\):await loadCloudState\(pin\)/u);
+  assert.match(html,/bootstrapCloud\(\)[\s\S]*?resumePendingSync\(sharedPinValue\)/u);
+  assert.match(html,/unlockSharedPin\(\)[\s\S]*?resumePendingSync\(pin\)/u);
+});
+
+test('v1.0.1候補: 例外修正の空欄・文字列・負数は0へ変換せず保存前に拒否する',()=>{
+  const validate=raw=>{const text=String(raw).trim(),numeric=Number(text);return text!==''&&Number.isFinite(numeric)&&numeric>=0&&Number.isInteger(numeric)};
+  assert.equal(validate(''),false);assert.equal(validate('abc'),false);assert.equal(validate('-1'),false);assert.equal(validate('1.5'),false);assert.equal(validate('0'),true);assert.equal(validate('12'),true);
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  const block=js.match(/async function saveManualWaveProgress\(\)\{[\s\S]*?\n  \}/u)?.[0]||'';
+  assert.match(block,/raw=input\.value\.trim\(\),numeric=Number\(raw\)/u);
+  assert.match(block,/raw===''.*!Number\.isFinite\(numeric\).*numeric<0.*!Number\.isInteger\(numeric\)/u);
+  assert.doesNotMatch(block,/Number\(\$\('manualWaveCompleted'\)\.value\)\|\|0/u);
+});
+
+test('v1.0.1候補: 進捗保存の連打は処理中ガードで1件だけ記録する',async()=>{
+  let busy=false,records=0;
+  const save=async()=>{if(busy)return false;busy=true;try{records+=1;await Promise.resolve();return true}finally{busy=false}};
+  await Promise.all([save(),save()]);assert.equal(records,1);
+  const html=readFileSync(new URL('./index.html',import.meta.url),'utf8');
+  const js=readFileSync(new URL('./ship-pace-ops.js',import.meta.url),'utf8');
+  assert.match(html,/id="quickSaveButton"/u);
+  assert.match(js,/if\(opsProgressSaveBusy\)return/u);
+  assert.match(js,/opsProgressSaveBusy=true/u);
+  assert.match(js,/saveButton\.disabled=true/u);
+  assert.match(js,/finally\{opsProgressSaveBusy=false;if\(saveButton\)saveButton\.disabled=false\}/u);
+});
+
 test('9:30開始は10:00、11:00、12:00…を対象時刻にする',()=>{
   assert.deepEqual(targets(9*60+30,12*60),[10*60,11*60,12*60]);
 });
