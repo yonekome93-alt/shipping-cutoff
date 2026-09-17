@@ -30,7 +30,7 @@
     .quick-grid{display:grid;grid-template-columns:1.2fr 1fr auto;gap:10px;align-items:end}.quick-grid label{font-size:12px;color:var(--muted);font-weight:700}.quick-grid input,.quick-grid select{display:block;width:100%;margin-top:5px;border:1px solid var(--line);border-radius:11px;padding:10px;background:#fff}
     .history-list{display:grid;gap:8px;margin-top:12px}.history-item{display:flex;justify-content:space-between;gap:12px;padding:12px;background:#f7f9fd;border-radius:12px;font-size:13px}.history-item small{color:var(--muted)}
     .report-box{width:100%;min-height:260px;border:1px solid var(--line);border-radius:14px;padding:14px;line-height:1.7;background:#f9fbfe;color:var(--ink)}
-    .mode-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-6px 0 18px;padding:12px 15px;border-radius:14px;background:#fff8e8;border:1px solid #edd9aa;color:#7b5519}.mode-bar[hidden]{display:none}.mode-bar b{display:block}.mode-bar small{display:block;margin-top:2px}
+    .mode-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-6px 0 18px;padding:12px 15px;border-radius:14px;background:#eef6fb;border:1px solid #c9dcea;color:#3f627e}.mode-bar[hidden]{display:none}.mode-bar b{display:block;color:#174d76;letter-spacing:.08em}.mode-bar small{display:block;margin-top:3px;line-height:1.55}.public-demo-hidden,#activeWorkersPanel,.future-panel,#authScreen,section.panel:has(#personalRanking),details.panel:has(#workerMasterList),section.panel:has(#productivityContent),section.panel:has(#dailyReport){display:none!important}.demo-input-note{margin:0 0 16px;padding:11px 13px;border-radius:12px;background:#fff8e8;border:1px solid #ead7a2;color:#795a20;font-size:12px;line-height:1.65}
     .ops-status{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.last-sync{font-size:11px;color:var(--muted)}.help-trigger{padding:8px 11px;border-radius:999px;background:#edf2ff;color:var(--blue);font-size:11px;white-space:nowrap}.conflict{padding:14px;border-radius:14px;background:#fff0f2;border:1px solid #f2cbd2;color:#9c3043;margin-bottom:12px}.conflict[hidden]{display:none}
     .audit-actions{display:flex;gap:8px;flex-wrap:wrap}.history-kind{display:inline-block;margin-left:7px;padding:3px 7px;border-radius:999px;background:#edf2ff;color:var(--blue);font-size:10px;font-weight:800}
     .future-panel{border-color:#cbd8ff;background:linear-gradient(180deg,#f7f9ff 0,#fff 42%)}.future-date{font-weight:800;color:var(--blue)}
@@ -65,8 +65,9 @@
 </head>
 <body>
   <main class="shell">
-    <header><div class="brand"><div class="mark"><img src="./ship-pace-icon.png" alt=""></div><div><b>SHIP PACE</b><small>方面別 出荷締切ナビ</small></div></div><div class="ops-status"><button id="syncStatus" class="sync" onclick="openLogin()">端末保存</button><span id="lastSyncText" class="last-sync">未共有</span><button id="testModeButton" class="secondary" onclick="toggleTestMode()">テストモード</button><button class="help-trigger" type="button" onclick="openUsageGuide()" aria-haspopup="dialog" aria-controls="usageGuide">？ 使い方</button></div><div class="live"><i></i>LIVE</div></header>
-    <div id="testModeBar" class="mode-bar" hidden><div><b>テストモード実行中</b><small>入力内容は本番・クラウドへ反映されません。</small></div><button class="secondary" onclick="toggleTestMode()">本番へ戻る</button></div>
+    <header><div class="brand"><div class="mark"><img src="./ship-pace-icon.png" alt=""></div><div><b>SHIP PACE</b><small>方面別 出荷締切ナビ</small></div></div><div class="ops-status"><button id="syncStatus" class="sync" disabled>DEMO MODE</button><span id="lastSyncText" class="last-sync">端末内保存のみ</span><button id="testModeButton" class="secondary" onclick="resetPublicDemo()">デモをリセット</button><button class="help-trigger" type="button" onclick="openUsageGuide()" aria-haspopup="dialog" aria-controls="usageGuide">？ 使い方</button></div><div class="live">PUBLIC DEMO</div></header>
+    <div id="testModeBar" class="mode-bar"><div><b>PUBLIC DEMO / PROTOTYPE</b><small>入力内容はこのブラウザ内のデモ領域（localStorage）だけに保存され、本番・共有環境・クラウドには送信されません。実際の顧客名・個人名・店舗情報・作業ID・物量・機密情報は入力しないでください。</small></div><button class="secondary" onclick="resetPublicDemo()">デモをリセット</button></div>
+    <p class="demo-input-note">表示される方面名・作業ID・数値は公開デモ用のサンプルです。ページを再読み込みしても同じ端末には状態が残るため、終了時は「デモをリセット」を押してください。</p>
     <div id="conflictBox" class="conflict" hidden><b>ほかの端末で新しい更新があります。</b><div>この端末からの保存を停止しました。最新データを読み込んでから入力し直してください。</div><button class="secondary" onclick="resolveConflict()" style="margin-top:9px">最新データを読み込む</button></div>
     <section id="currentProgressDashboard" class="panel ops-dashboard" aria-live="polite"></section>
     <section id="activeWorkersPanel" class="panel">
@@ -258,25 +259,25 @@
     <main id="manualGuidePage" class="manual-guide-page"><img id="manualGuideImage" class="manual-guide-image" src="./manual-pages/page-1.jpg" alt="SHIP PACE 詳しい操作ガイド 1ページ目"></main>
     <nav class="manual-guide-nav" aria-label="操作ガイドのページ送り"><button id="manualGuidePrev" class="secondary" type="button" onclick="changeManualPage(-1)" disabled>前へ</button><strong id="manualGuideCounter" class="manual-guide-counter" aria-live="polite">1 / 8</strong><button id="manualGuideNext" class="primary" type="button" onclick="changeManualPage(1)">次へ</button></nav>
   </div>
-  <div id="authScreen" class="auth"><section class="auth-card"><div class="eyebrow">CLOUD SHARING</div><h2>共通PIN</h2><p>全員共通の4桁PINを入力すると、スマホとパソコンで同じ進捗を共有できます。</p><input id="sharedPin" type="password" inputmode="numeric" maxlength="4" autocomplete="one-time-code" placeholder="4桁PIN"><button class="primary" onclick="unlockSharedPin()">共通PINで開始</button><button class="secondary" onclick="closeLogin()">端末保存のまま使う</button><p id="authMessage" class="auth-message"></p></section></div>
+  <div id="authScreen" class="auth public-demo-hidden" aria-hidden="true"><input id="sharedPin" type="hidden"><p id="authMessage"></p></div>
   <script>
-    const STORAGE='shipping-cutoff-standalone-v1';
-    const TEST_STORAGE='shipping-cutoff-test-v1';
+    const STORAGE='shipping-cutoff-public-demo-v1';
+    const TEST_STORAGE='shipping-cutoff-public-demo-v1';
     const TEST_MODE_KEY='shipping-cutoff-test-mode';
     const DEVICE_ID_KEY='shipping-cutoff-device-id';
     const VOICE_KEY='shipping-cutoff-voice';
     const NOTIFICATION_KEY='shipping-cutoff-notification';
     const COMPLETION_GUARD_KEY='shipping-cutoff-deferred-completions-v1';
     const PENDING_SYNC_KEY='shipping-cutoff-pending-sync-v1';
-    const SB_URL='https://ygbxyejhfeieqhgdymys.supabase.co';
-    const SB_KEY='sb_publishable_kQvjwG8nKu1YGM_3qlZ-Vg_ok3jlvIW';
-    const SB_HEADERS={apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'};
-    const WORKSPACE_ID='4dad83ad-0fb0-451f-b375-49595c06e538';
+    const PUBLIC_DEMO=true;
+    const SB_URL='';
+    const SB_HEADERS={};
+    const WORKSPACE_ID='';
     const PIN_SESSION='shipping-cutoff-shared-pin';
     let sharedPinValue='',cloudBusy=false,cloudUpdatedAt='',lastCloudRevision='',saveConflict=false,longTermReports=[],reportsLoaded=false,formDirty=false,lastCloudAuthError=null;
     let tomorrowDraft=null;
     let currentTotalUnitsDraft=null;
-    let isTestMode=localStorage.getItem(TEST_MODE_KEY)==='1';
+    let isTestMode=true;
     let voiceEnabled=localStorage.getItem(VOICE_KEY)==='1';
     let notificationEnabled=localStorage.getItem(NOTIFICATION_KEY)!=='0';
     let spokenAlerts=new Set(),notifiedAlerts=new Set();
@@ -416,7 +417,7 @@
     }
     function render(){
       const now=nowMinutes(),rows=groupedRows(),pending=rows.filter(x=>x.item.planned>0&&!x.item.completedAt),done=state.waves.filter(x=>x.planned>0&&x.completedAt).length;
-      testModeBar.hidden=!isTestMode;testModeButton.textContent=isTestMode?'本番へ戻る':'テストモード';voiceButton.textContent=voiceEnabled?'音声案内：ON':'音声案内を有効化';
+      testModeBar.hidden=false;testModeButton.textContent='デモをリセット';voiceButton.textContent=voiceEnabled?'音声案内：ON':'音声案内を有効化';
       renderNotificationState();
       tomorrowPlanDate.min=offsetDateKey(1);if(!tomorrowPlanDate.value||tomorrowPlanDate.value<=dateKey())tomorrowPlanDate.value=offsetDateKey(1);
       operationStart.value=state.operationStart||'09:30';operationSummaryText.textContent=`${state.operationStart||'09:30'}から最終締切まで。休憩時間を自動で除外します。`;
@@ -575,7 +576,7 @@
       setSync(code==='rate_limited'?'PIN一時停止':'PIN未認証','error');return true
     }
     async function saveCloudState(changeType='shipping_update'){
-      if(isTestMode){setSync('テスト中');return true}
+      if(PUBLIC_DEMO||isTestMode){setSync('DEMO MODE');return true}
       if(!sharedPinValue)return false;
       for(let i=0;cloudBusy&&i<20;i++)await new Promise(resolve=>setTimeout(resolve,100));
       if(cloudBusy)return false;
@@ -590,7 +591,7 @@
       }catch(e){setSync('共有エラー','error');return false}finally{cloudBusy=false}
     }
     async function loadCloudState(pin=sharedPinValue,{background=false}={}){
-      if(isTestMode||!pin||cloudBusy)return false;cloudBusy=true;setSync('読込中');
+      if(PUBLIC_DEMO||isTestMode||!pin||cloudBusy)return false;cloudBusy=true;setSync('読込中');
       try{
         const r=await fetch(SB_URL+'/rest/v1/rpc/load_shipping_cutoff_state',{method:'POST',headers:SB_HEADERS,cache:'no-store',body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:pin})});
         if(!r.ok)throw new Error('invalid');
@@ -717,11 +718,11 @@
       auditHistory.innerHTML=state.auditLog.length?[...state.auditLog].reverse().slice(0,30).map(x=>`<div class="history-item"><span>${escapeHtml(x.label)}<span class="history-kind">${x.mode==='test'?'テスト':'本番'}</span></span><small>${new Date(x.at).toLocaleString('ja-JP')}</small></div>`).join(''):'<div class="history-item"><span>操作履歴はまだありません</span></div>';
     }
     async function loadLongTermReports(pin=sharedPinValue){
-      if(!pin||isTestMode)return false;
+      if(PUBLIC_DEMO||!pin||isTestMode)return false;
       try{const r=await fetch(SB_URL+'/rest/v1/rpc/load_shipping_cutoff_reports',{method:'POST',headers:SB_HEADERS,cache:'no-store',body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:pin,input_limit:3650})});if(!r.ok)throw new Error('load reports');const result=await r.json();if(cloudAuthFailure(result))return false;longTermReports=Array.isArray(result)?result:[];reportsLoaded=true;renderReports();return true}catch{return false}
     }
     async function saveLongTermReport(entry){
-      if(!sharedPinValue||isTestMode)return false;
+      if(PUBLIC_DEMO||!sharedPinValue||isTestMode)return false;
       try{const r=await fetch(SB_URL+'/rest/v1/rpc/save_shipping_cutoff_report',{method:'POST',headers:SB_HEADERS,body:JSON.stringify({input_workspace:WORKSPACE_ID,input_pin:sharedPinValue,input_report_date:entry.date,input_summary:entry.summary,input_report_text:entry.text})});if(!r.ok)throw new Error('save report');const result=await r.json();if(cloudAuthFailure(result))return false;reportsLoaded=false;await loadLongTermReports();return true}catch{return false}
     }
     async function saveDailyReport(){
@@ -793,16 +794,13 @@
       const alerts=alertRows(groupedRows()),today=dateKey();
       for(const x of alerts){const key=`${today}-${x.item.id}-${x.tier}-${x.danger?'risk':'time'}`;if(notifiedAlerts.has(key))continue;notifiedAlerts.add(key);const advice=alertAdvice(x);new Notification(advice.title,{body:advice.action});break}
     }
-    function toggleTestMode(){
-      if(!isTestMode){
-        persist();const existing=localStorage.getItem(TEST_STORAGE);if(!existing)localStorage.setItem(TEST_STORAGE,JSON.stringify({...JSON.parse(JSON.stringify(state)),auditLog:[],undoStack:[],syncRevision:'',syncDevice:''}));
-        isTestMode=true;localStorage.setItem(TEST_MODE_KEY,'1');state=load(TEST_STORAGE);setSync('テスト中');lastSyncText.textContent='クラウドへ保存しません';
-      }else{
-        isTestMode=false;localStorage.setItem(TEST_MODE_KEY,'0');state=load(STORAGE);setSync(sharedPinValue?'共有済み':'PIN未認証',sharedPinValue?'ok':'');lastSyncText.textContent=cloudUpdatedAt?`最終共有 ${new Date(cloudUpdatedAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`:'未共有';
-      }
-      lastStableState=JSON.parse(JSON.stringify(state));render();scrollTo({top:0,behavior:'smooth'});
+    function resetPublicDemo(){
+      if(!confirm('公開デモの入力値・進捗・履歴・表示状態を初期状態に戻しますか？'))return;
+      [TEST_STORAGE,TEST_MODE_KEY,PENDING_SYNC_KEY,COMPLETION_GUARD_KEY,PIN_SESSION].forEach(key=>{localStorage.removeItem(key);sessionStorage.removeItem(key)});
+      sharedPinValue='';longTermReports=[];reportsLoaded=false;saveConflict=false;formDirty=false;isTestMode=true;localStorage.setItem(TEST_MODE_KEY,'1');state=load(TEST_STORAGE);lastStableState=JSON.parse(JSON.stringify(state));render();setSync('DEMO MODE');lastSyncText.textContent='端末内保存のみ';scrollTo({top:0,behavior:'smooth'});
     }
-    function openLogin(){if(isTestMode){saveMessage.textContent='テストモード中はクラウド共有しません。';return}if(sharedPinValue){loadCloudState();return}authScreen.classList.add('open');setTimeout(()=>sharedPin.focus(),50)}
+    function toggleTestMode(){resetPublicDemo()}
+    function openLogin(){saveMessage.textContent='公開デモではクラウド共有を使用できません。';}
     function closeLogin(){authScreen.classList.remove('open')}
     let usageGuideReturnFocus=null;
     function openUsageGuide(){usageGuideReturnFocus=document.activeElement;usageGuide.hidden=false;document.body.classList.add('usage-guide-open');requestAnimationFrame(()=>usageGuide.querySelector('.usage-guide-card')?.focus())}
@@ -819,9 +817,9 @@
     function closeManualGuide(){manualGuideView.hidden=true;document.body.classList.remove('usage-guide-open');window.scrollTo(0,manualGuideScrollY);usageGuideReturnFocus?.focus?.();usageGuideReturnFocus=null}
     manualGuidePage.addEventListener('touchstart',event=>{const touch=event.changedTouches[0];manualTouchStartX=touch.clientX;manualTouchStartY=touch.clientY},{passive:true});
     manualGuidePage.addEventListener('touchend',event=>{const touch=event.changedTouches[0];const dx=touch.clientX-manualTouchStartX;const dy=touch.clientY-manualTouchStartY;if(Math.abs(dx)>=55&&Math.abs(dx)>Math.abs(dy)*1.2)changeManualPage(dx<0?1:-1)},{passive:true});
-    async function resumePendingSync(pin){sharedPinValue=pin;lastCloudRevision=state.syncRevision||'';const pending=pendingSync(),saved=pending?await saveCloudState(pending.changeType||'shipping_update'):await loadCloudState(pin);if(saved)sessionStorage.setItem(PIN_SESSION,pin);return saved}
-    async function unlockSharedPin(){const pin=sharedPin.value.trim();if(!/^\d{4}$/.test(pin)){authMessage.textContent='4桁の数字を入力してください。';return}authMessage.textContent='確認中…';lastCloudAuthError=null;if(await resumePendingSync(pin)){authMessage.textContent='共有を開始しました。';closeLogin()}else if(lastCloudAuthError?.code==='rate_limited'){const mins=Math.max(1,Math.ceil(lastCloudAuthError.retryAfterSeconds/60));authMessage.textContent=`PINの連続入力に失敗したため、約${mins}分後に再度お試しください。`}else authMessage.textContent=pendingSync()?'未共有データを端末に保持しています。通信を確認して再度お試しください。':'PINが違うか、クラウドの初回設定が未完了です。'}
-    async function bootstrapCloud(){if(isTestMode){setSync('テスト中');lastSyncText.textContent='クラウドへ保存しません';return}localStorage.removeItem(PIN_SESSION);sharedPinValue=sessionStorage.getItem(PIN_SESSION)||'';if(sharedPinValue){if(await resumePendingSync(sharedPinValue))closeLogin()}else setSync(pendingSync()?'未共有データあり':'PIN未認証',pendingSync()?'error':'')}
+    async function resumePendingSync(pin){if(PUBLIC_DEMO)return false;sharedPinValue=pin;lastCloudRevision=state.syncRevision||'';const pending=pendingSync(),saved=pending?await saveCloudState(pending.changeType||'shipping_update'):await loadCloudState(pin);if(saved)sessionStorage.setItem(PIN_SESSION,pin);return saved}
+    async function unlockSharedPin(){if(PUBLIC_DEMO){authMessage.textContent='公開デモではクラウド共有を利用できません。';return}const pin=sharedPin.value.trim();if(!/^\d{4}$/.test(pin)){authMessage.textContent='4桁の数字を入力してください。';return}authMessage.textContent='確認中…';lastCloudAuthError=null;if(await resumePendingSync(pin)){authMessage.textContent='共有を開始しました。';closeLogin()}else if(lastCloudAuthError?.code==='rate_limited'){const mins=Math.max(1,Math.ceil(lastCloudAuthError.retryAfterSeconds/60));authMessage.textContent=`PINの連続入力に失敗したため、約${mins}分後に再度お試しください。`}else authMessage.textContent=pendingSync()?'未共有データを端末に保持しています。通信を確認して再度お試しください。':'PINが違うか、クラウドの初回設定が未完了です。'}
+    async function bootstrapCloud(){isTestMode=true;sharedPinValue='';localStorage.setItem(TEST_MODE_KEY,'1');localStorage.removeItem(PIN_SESSION);sessionStorage.removeItem(PIN_SESSION);clearPendingSync();setSync('DEMO MODE');lastSyncText.textContent='端末内保存のみ'}
     function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
     function setupMobileProgressNav(){
       const nav=document.querySelector('.mobile-progress-nav'),panel=document.getElementById('progressPanel'),activeWorkers=document.getElementById('activeWorkersPanel');
@@ -848,6 +846,6 @@
     setInterval(()=>{if(sharedPinValue&&!isTestMode&&!saveConflict)loadCloudState(sharedPinValue,{background:true})},15000);
     if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=42').catch(()=>{}));
   </script>
-    <script src="./ship-pace-ops.js?v=47"></script>
+    <script src="./ship-pace-ops.js?v=48"></script>
 </body>
 </html>
