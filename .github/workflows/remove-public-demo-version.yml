@@ -1,0 +1,37 @@
+name: Remove visible SHIP PACE version badge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/remove-public-demo-version.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove version badge and cleanup workflow
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('ship-pace-ops.js')
+          text = p.read_text(encoding='utf-8')
+          old = "if(badge)badge.textContent='v47'"
+          new = "if(badge)badge.remove()"
+          if old not in text:
+              raise SystemExit('Expected v47 badge code not found')
+          p.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          rm .github/workflows/remove-public-demo-version.yml
+          git config user.name 'yonekome93-alt'
+          git config user.email '302080243+yonekome93-alt@users.noreply.github.com'
+          git add ship-pace-ops.js .github/workflows/remove-public-demo-version.yml
+          git commit -m 'Hide public demo version badge'
+          git push
